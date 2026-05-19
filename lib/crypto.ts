@@ -1,7 +1,7 @@
 import CryptoJS from 'crypto-js';
 
-// 🌟 주의: 이 키는 나중에 .env.local로 옮기는 것이 좋지만, 우선 테스트를 위해 하드코딩합니다.
-const MASTER_KEY = "Your-Very-Secret-Master-Key-12345"; 
+// 🌟 .env.local 파일에서 안전하게 키를 불러옵니다. (없을 경우를 대비한 예비키 포함)
+const MASTER_KEY = process.env.NEXT_PUBLIC_MASTER_KEY || "fallback-secret-key-123";
 
 export const CryptoUtil = {
   // 🔐 암호화 (브라우저/서버 공용)

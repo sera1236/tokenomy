@@ -12,6 +12,9 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// 🌟 여기서 'export'를 해야 page.tsx에서 'db'를 가져다 쓸 수 있습니다.
+import { getAuth } from "firebase/auth";
+
+// 🌟 여기서 'export'를 해야 page.tsx에서 'db'와 'auth'를 가져다 쓸 수 있습니다.
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+export const auth = getAuth(app);

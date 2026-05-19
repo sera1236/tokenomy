@@ -87,19 +87,37 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMounted, setIsMounted] = useState(false);
 
+  // 🌟 [변경 코드] 임시 세션스토리지 대신, 파이어베이스 데이터베이스와 실시간 무인 동기화를 진행합니다.
   useEffect(() => {
     setIsMounted(true);
-    const saved = sessionStorage.getItem('chat_history');
-    if (saved) {
-      try { setMessages(JSON.parse(saved)); } catch(e) {}
-    }
   }, []);
 
   useEffect(() => {
-    if (isMounted) {
-      sessionStorage.setItem('chat_history', JSON.stringify(messages));
-    }
-  }, [messages, isMounted]);
+    if (!isMounted || !currentApiKey) return;
+
+    const { auth, db } = require('@/lib/firebase');
+    const { collection, query, where, orderBy, onSnapshot } = require('firebase/firestore');
+    const user = auth.currentUser;
+    
+    if (!user) return;
+
+    // 내 UID와 현재 채팅 중인 API 키에 매칭되는 저장된 대화 데이터들을 시간순(asc)으로 실시간 스캔합니다.
+    const q = query(
+      collection(db, 'chats'),
+      where('userId', '==', user.uid),
+      where('apiKey', '==', currentApiKey),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot: any) => {
+      const docs = snapshot.docs.map((doc: any) => doc.data());
+      if (docs.length > 0) {
+        setMessages(docs);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [currentApiKey, isMounted]);
 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -132,12 +150,35 @@ export default function ChatScreen() {
   };
 
   // 🌟 공통 파일 처리 로직: 이미지, 일반 텍스트, 무거운 문서(PDF, Word)를 분기 처리합니다.
+  // 🌟 [변경 코드] 최대 10MB 제한 및 무분별한 파일 유입을 차단하는 2중 보안 가드 설치
   const processFiles = async (files: File[]) => {
     if (files.length === 0) return;
     
+    const MAX_SIZE = 10 * 1024 * 1024; // 🔥 철벽 방어선: 최대 10MB 제한
+    const allowedExtensions = ['.pdf', '.docx', '.txt', '.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.json', '.md', '.csv', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+
+    // 1차 필터링: 용량 및 확장자 체크
+    const filteredFiles = files.filter(file => {
+      const filename = file.name.toLowerCase();
+      const isTooLarge = file.size > MAX_SIZE;
+      const isAllowedExt = allowedExtensions.some(ext => filename.endsWith(ext));
+
+      if (isTooLarge) {
+        alert(`🚨 [용량 초과] ${file.name} 파일이 10MB를 초과하여 업로드할 수 없습니다.`);
+        return false;
+      }
+      if (!isAllowedExt) {
+        alert(`❌ [지원하지 않는 포맷] ${file.name}은(는) 분석 가능한 파일 형식이 아닙니다.`);
+        return false;
+      }
+      return true;
+    });
+
+    if (filteredFiles.length === 0) return;
+
     setIsParsing(true); // 🌟 파싱 시작 (전송 잠금)
     try {
-      const newFiles = await Promise.all(files.map(async (file) => {
+      const newFiles = await Promise.all(filteredFiles.map(async (file) => {
         const filename = file.name.toLowerCase();
         
         if (file.type.startsWith('image/')) {
@@ -328,7 +369,20 @@ export default function ChatScreen() {
     setAttachedFiles([]); 
     
     // 🌟 이미지가 있으면 메시지 객체에 이미지 정보 포함하여 저장 (화면에 표시)
-    setMessages(prev => [...prev, { role: 'user', content: displayMsg, attachedImages: imageFiles.length > 0 ? imageFiles : undefined }]);
+    // 🌟 전송 즉시 Firestore 'chats' 컬렉션에 유저의 메시지와 첨부 이미지 배열을 영구 누적합니다.
+    const { auth, db } = require('@/lib/firebase');
+    const { collection, addDoc, serverTimestamp } = require('firebase/firestore');
+    const user = auth.currentUser;
+
+    await addDoc(collection(db, 'chats'), {
+      userId: user?.uid,
+      apiKey: currentApiKey,
+      role: 'user',
+      content: displayMsg,
+      attachedImages: imageFiles.length > 0 ? imageFiles : null,
+      createdAt: serverTimestamp()
+    });
+
     setIsLoading(true);
 
     try {
@@ -351,6 +405,33 @@ export default function ChatScreen() {
       // 🌟 백엔드가 순수 JSON을 반환하므로 전체 데이터를 정상적으로 파싱합니다. (Grok 오류 해결)
       const data = await res.json();
       const rawResponse = data.content?.[0]?.text || "응답이 없습니다.";
+
+      // 🌟 [에스크로 안전 환불 시스템] 자동 철거 메시지나 품절 안내가 감지되면 즉시 50원 반환
+      if (rawResponse.includes('잔액이 소진되어') || rawResponse.includes('일시 품절')) {
+        try {
+          const { auth, db } = require('@/lib/firebase');
+          const { doc, updateDoc, increment } = require('firebase/firestore');
+          const user = auth.currentUser;
+          
+          if (user) {
+            // 1. 파이어베이스 DB에서 실제 유저의 포인트를 50원 다시 충전(원복)
+            await updateDoc(doc(db, 'users', user.uid), {
+              points: increment(50)
+            });
+            
+            // 2. Zustand 전역 스토어 화면 포인트 잔액도 즉시 50원 복구
+            const currentPoints = (useStore.getState() as any).userPoints || 0;
+            if (typeof (useStore.getState() as any).setUserPoints === 'function') {
+              (useStore.getState() as any).setUserPoints(currentPoints + 50);
+            }
+            alert("🚨 [안전 환불] 판매자 토큰 고갈이 감지되어 입장료 50원이 즉시 자동 환불되었습니다.");
+          }
+        } catch (refundErr) {
+          console.error("에스크로 환불 처리 실패:", refundErr);
+        }
+      }
+
+      // 화면에 빈 말풍선을 먼저 띄웁니다.
 
       // 화면에 빈 말풍선을 먼저 띄웁니다.
       setMessages(prev => [...prev, { role: 'assistant', content: '', apiType: currentApiType }]);
@@ -377,6 +458,22 @@ export default function ChatScreen() {
       if (rawResponse.includes('<html') && !abortControllerRef.current.signal.aborted) {
         setPreviewHtml(rawResponse);
         setShowPreview(true);
+      }
+
+      // 🌟 AI의 타이핑 연출과 별개로, 최종 확정된 텍스트 답변을 데이터베이스에 영구 보존 처리합니다.
+      if (!abortControllerRef.current.signal.aborted) {
+        const { auth, db } = require('@/lib/firebase');
+        const { collection, addDoc, serverTimestamp } = require('firebase/firestore');
+        const user = auth.currentUser;
+
+        await addDoc(collection(db, 'chats'), {
+          userId: user?.uid,
+          apiKey: currentApiKey,
+          role: 'assistant',
+          content: rawResponse,
+          apiType: currentApiType,
+          createdAt: serverTimestamp()
+        });
       }
 
     } catch (error: any) {
@@ -508,13 +605,14 @@ return (
 
           <div className="max-w-4xl mx-auto flex gap-3 items-end relative">
             {/* 🌟 숨겨진 파일 입력창 (PDF, DOCX 추가 확장) */}
+            {/* 🌟 accept 속성을 정밀하게 가다듬어 OS 파일 탐색기 단계에서부터 불량 포맷을 원천 봉쇄합니다. */}
             <input 
               type="file" 
               multiple 
               ref={fileInputRef} 
               onChange={handleFileUpload} 
               className="hidden" 
-              accept="image/*,.txt,.html,.css,.js,.jsx,.ts,.tsx,.json,.md,.csv,.pdf,.docx" 
+              accept="image/png, image/jpeg, image/gif, image/webp, .txt, .html, .css, .js, .jsx, .ts, .tsx, .json, .md, .csv, application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
             />
             
             {/* 🌟 파일 첨부 클립 버튼 */}

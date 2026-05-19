@@ -6,16 +6,44 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { CryptoUtil } from '@/lib/crypto';
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useStore } from '@/lib/useStore';
+import { auth } from '@/lib/firebase';
 // (나머지 import는 그대로 유지)
 
-// 🌟 바로 이 녀석(export default function)이 없어서 난 에러입니다!
 export default function MyPage() {
   const router = useRouter();
-
-  const [walletBalance, setWalletBalance] = useState(0);
+  
+  // 🌟 전역 스토어에서 내 진짜 포인트 잔액을 불러옵니다.
+  const userPoints = useStore((state) => state.userPoints);
+  const setUserPoints = useStore((state) => state.setUserPoints);
   const [apiKey, setApiKey] = useState('');
   const [priceRaw, setPriceRaw] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 🌟 판매자 대시보드용 상태 및 데이터 불러오기
+  const [myItems, setMyItems] = useState<any[]>([]);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+
+  useEffect(() => {
+    const fetchMyItems = async () => {
+      // 로그인이 안 되어 있거나 이름이 없으면 중단합니다.
+      if (!auth.currentUser?.displayName) return;
+      
+      const { collection, query, where, getDocs } = require('firebase/firestore');
+      
+      // 내 이름으로 등록된 매물만 파이어베이스에서 싹 긁어옵니다.
+      const q = query(collection(db, 'market_items'), where('sellerName', '==', auth.currentUser.displayName));
+      const snapshot = await getDocs(q);
+      const items = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+      setMyItems(items);
+
+      // 누적 수익 계산 (판매 횟수 * 가격)
+      const revenue = items.reduce((acc, item) => acc + ((item.salesCount || 0) * item.price), 0);
+      setTotalRevenue(revenue);
+    };
+    
+    fetchMyItems();
+  }, []);
 
   let detectedModel = '';
   if (!apiKey) detectedModel = '';
@@ -28,19 +56,17 @@ export default function MyPage() {
   else detectedModel = '알 수 없는 API입니다.';
 
   const handleRecharge = () => {
-    setWalletBalance(prev => prev + 5000);
-    alert('5,000원이 충전되었습니다.');
+    setUserPoints(userPoints + 5000);
+    alert('5,000원이 충전되었습니다. (테스트용)');
   };
 
   const handleSubmit = async () => {
-    alert("출입증 확인: " + process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
     if (!apiKey.trim()) return alert('키를 입력해주세요.');
     if (!priceRaw) return alert('가격을 입력해주세요.');
 
     setIsSubmitting(true);
 
     try {
-      // 🌟 API 키 첫 글자만 보고 어떤 AI인지 귀신같이 알아내는 감지기
       let newApiType = 'unknown';
       let modelName = 'AI 모델';
 
@@ -55,16 +81,33 @@ export default function MyPage() {
       }
       const scrambledKey = CryptoUtil.encrypt(apiKey.trim());
 
+      // 🌟 1차 핑 테스트 (검증 API 호출)
+      const verifyRes = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ encryptedApiKey: scrambledKey, apiType: newApiType })
+      });
+      
+      const verifyData = await verifyRes.json();
+
+      if (!verifyData.success) {
+        alert(verifyData.message);
+        setIsSubmitting(false);
+        return; // 가짜 키나 잔액 없는 키면 여기서 차단되어 저장되지 않습니다!
+      }
+
+      // 🌟 검증 통과 시 Firestore에 저장
       await addDoc(collection(db, 'market_items'), {
         title: `${modelName} 토큰 판매`,
-        sellerName: 'AI 전문가',
+        sellerName: auth.currentUser?.displayName || '인증된 판매자',
         price: Number(priceRaw) || 100,
         apiType: newApiType,
         apiKey: scrambledKey,
+        salesCount: 0, // 🌟 대시보드 통계를 위해 판매 횟수 카운터 장착
         createdAt: serverTimestamp()
       });
 
-      alert('안전하게 암호화되어 등록됐어요!');
+      alert('유효성 검증 완료! 안전하게 암호화되어 등록됐어요!');
       setApiKey('');
       setPriceRaw('');
       router.push('/');
@@ -85,7 +128,7 @@ export default function MyPage() {
         <p className="text-[#AAAAAA] text-sm mb-3">토큰페이 잔액</p>
         <div className="flex justify-between items-center">
           <div className="flex items-baseline gap-1">
-            <span className="text-4xl font-black text-white">{walletBalance.toLocaleString()}</span>
+            <span className="text-4xl font-black text-white">{userPoints.toLocaleString()}</span>
             <span className="text-lg text-white">원</span>
           </div>
           <button
@@ -99,6 +142,25 @@ export default function MyPage() {
       </div>
 
       <hr className="border-[#2C2C2C]" />
+
+      {/* 🌟 판매자 수익 대시보드 UI 추가 */}
+      <div>
+        <p className="text-[#AAAAAA] font-bold text-sm">통계 및 관리</p>
+        <h2 className="text-2xl font-extrabold text-white mt-1">내 매물 수익 대시보드</h2>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-[#1A2E26] border border-[#059669] p-5 rounded-[24px] shadow-lg flex flex-col justify-center items-center transition-transform hover:scale-105 cursor-pointer">
+          <p className="text-[#10B981] text-sm font-bold mb-1">등록한 API 매물</p>
+          <p className="text-3xl font-black text-white">{myItems.length}<span className="text-lg font-normal text-gray-400 ml-1">개</span></p>
+        </div>
+        <div className="bg-[#2A1E1E] border border-[#FF5252] p-5 rounded-[24px] shadow-lg flex flex-col justify-center items-center transition-transform hover:scale-105 cursor-pointer">
+          <p className="text-[#FF5252] text-sm font-bold mb-1">총 누적 수익</p>
+          <p className="text-3xl font-black text-white">{totalRevenue.toLocaleString()}<span className="text-lg font-normal text-gray-400 ml-1">원</span></p>
+        </div>
+      </div>
+
+      <hr className="border-[#2C2C2C] my-4" />
 
       <div>
         <p className="text-[#AAAAAA] font-bold text-sm">판매자 설정</p>

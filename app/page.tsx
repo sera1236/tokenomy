@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, deleteDoc, doc, orderBy } from 'firebase/firestore';
@@ -22,6 +22,36 @@ export default function TokenMarketScreen() {
   const setApiInfo = useStore((state) => state.setCurrentApi);
   const [marketItems, setMarketItems] = useState<TokenItem[]>([]);
 
+  // 🌟 [추가] 사용자가 선택한 필터(모델명)와 정렬(가격순) 상태
+  const [selectedFilter, setSelectedFilter] = useState('All');
+  const [sortOrder, setSortOrder] = useState('latest');
+
+  // 🌟 [추가] 선택된 조건에 맞춰 실시간으로 매물을 걸러내고 순서를 바꿉니다.
+  const displayedItems = useMemo(() => {
+    let items = [...marketItems];
+
+    // 1. 모델별 필터링
+    if (selectedFilter !== 'All') {
+      items = items.filter(item => {
+        const type = item.apiType.toLowerCase();
+        if (selectedFilter === 'GPT') return type.includes('openai');
+        if (selectedFilter === 'Claude') return type.includes('claude');
+        if (selectedFilter === 'Gemini') return type.includes('gemini');
+        if (selectedFilter === 'Grok') return type.includes('xai');
+        if (selectedFilter === 'Llama') return type.includes('groq') || type.includes('openrouter');
+        return true;
+      });
+    }
+
+    // 2. 가격순 정렬
+    if (sortOrder === 'price_asc') items.sort((a, b) => a.price - b.price);
+    else if (sortOrder === 'price_desc') items.sort((a, b) => b.price - a.price);
+    
+    return items;
+  }, [marketItems, selectedFilter, sortOrder]);
+
+  // 🌟 파이어베이스 실시간 데이터 연동
+
   // 🌟 파이어베이스 실시간 데이터 연동
   useEffect(() => {
     const q = query(collection(db, 'market_items'), orderBy('createdAt', 'desc'));
@@ -32,9 +62,22 @@ export default function TokenMarketScreen() {
     return () => unsubscribe();
   }, []);
 
+  const userPoints = useStore((state) => state.userPoints);
+  const setUserPoints = useStore((state) => state.setUserPoints);
+
   const handleBuyClick = (apiType: string, apiKey: string) => {
-    setApiInfo(apiType, apiKey);
-    router.push('/chat');
+    const ticketPrice = 50; 
+    
+    if (userPoints < ticketPrice) {
+      alert(`포인트가 부족합니다! (현재 잔액: ${userPoints}원)`);
+      return;
+    }
+    
+    if (confirm(`입장료 ${ticketPrice}원이 차감됩니다. 입장하시겠습니까?`)) {
+      setUserPoints(userPoints - ticketPrice); 
+      setApiInfo(apiType, apiKey);
+      router.push('/chat');
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -61,7 +104,44 @@ export default function TokenMarketScreen() {
           </div>
         ) : (
           <div className="flex flex-col gap-5">
-            {marketItems.map((item) => (
+            {/* 🌟 매물 필터 및 정렬 컨트롤 패널 */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 bg-[#1A1A1A] p-4 rounded-2xl border border-[#2C2C2C] shadow-lg">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar w-full md:w-auto pb-1 md:pb-0">
+          {['All', 'GPT', 'Claude', 'Gemini', 'Grok', 'Llama'].map((model) => (
+            <button
+              key={model}
+              onClick={() => setSelectedFilter(model)}
+              className={`px-4 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all ${
+                selectedFilter === model 
+                  ? 'bg-[#059669] text-white shadow-md transform scale-105' 
+                  : 'bg-[#2C2C2C] text-gray-400 hover:text-white hover:bg-[#333]'
+              }`}
+            >
+              {model}
+            </button>
+          ))}
+        </div>
+        
+        <select
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value)}
+          className="bg-[#2C2C2C] text-white text-xs font-bold px-4 py-2.5 rounded-xl outline-none border border-[#333] focus:border-[#059669] w-full md:w-auto cursor-pointer"
+        >
+          <option value="latest">⏱ 최신 등록순</option>
+          <option value="price_asc">📉 가격 낮은순</option>
+          <option value="price_desc">📈 가격 높은순</option>
+        </select>
+      </div>
+
+      {displayedItems.length === 0 && (
+        <div className="text-center py-16 bg-[#1E1E1E] rounded-3xl border border-[#2C2C2C]">
+          <span className="text-4xl mb-4 block">텅~</span>
+          <p className="text-gray-400 font-bold">해당 조건에 맞는 매물이 아직 없습니다.</p>
+        </div>
+      )}
+
+      {/* 🌟 전체 매물 대신, 필터링이 완료된 매물(displayedItems)을 그려줍니다. */}
+      {displayedItems.map((item) => (
               <TokenCard 
                 key={item.id} 
                 item={item} 
