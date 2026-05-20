@@ -9,7 +9,6 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { auth, db } from '@/lib/firebase';
-const [isEng, setIsEng] = useState(false); // 이 한 줄 추가
 import { collection, query, where, orderBy, onSnapshot, doc, setDoc, updateDoc, addDoc, increment, serverTimestamp, deleteDoc } from 'firebase/firestore';
 
 
@@ -85,6 +84,7 @@ const CodeBlock = ({ language, value, showPreview, onOpenPreview }: { language: 
 export default function ChatScreen() {
   const router = useRouter();
   // 🌟 다기종 릴레이 채팅을 위해 전역 스토어의 종속성을 줄입니다.
+  const [isEng, setIsEng] = useState(false);
   const { currentApiKey, currentApiType, userPoints, setUserPoints } = useStore(); 
   // 🌟 [대공사 3단계] 실시간 모델 스위칭용 상태 및 콤보박스 리스트
   const AVAILABLE_MODELS = ['GPT', 'Claude', 'Gemini', 'Grok', 'Llama'];
