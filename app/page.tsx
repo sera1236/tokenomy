@@ -721,7 +721,7 @@ return (
 
         {/* 🌟 수정됨: pb-28을 추가하여 RootLayout의 하단 네비게이션(h-20) 위로 입력창을 안전하게 끌어올림 */}
         {/* 🌟 여백 대폭 축소 (p-4 -> px-4 pt-2 pb-20), gap-2 -> gap-1.5 */}
-        <div className="bg-[#121212] px-4 py-3 border-t border-[#2C2C2C] shrink-0"> 
+        <div className="bg-[#121212] p-4 border-t border-[#2C2C2C] shrink-0 z-[60]">
           <div className="max-w-4xl mx-auto flex justify-between items-center mb-2">
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
               {[
