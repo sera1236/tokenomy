@@ -8,6 +8,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { auth, db } from '@/lib/firebase';
+import { collection, query, where, orderBy, onSnapshot, doc, setDoc, updateDoc, addDoc, increment, serverTimestamp } from 'firebase/firestore';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -93,8 +95,7 @@ export default function ChatScreen() {
   const [lowestPrice, setLowestPrice] = useState<number | null>(null);
 
   useEffect(() => {
-    const { db } = require('@/lib/firebase');
-    const { collection, onSnapshot } = require('firebase/firestore');
+  
     
     // DB에서 전체 매물을 실시간 스캔하여 현재 콤보박스에 선택된 모델의 최저가를 찾습니다.
     const unsubscribe = onSnapshot(collection(db, 'market_items'), (snapshot: any) => {
@@ -125,8 +126,6 @@ export default function ChatScreen() {
 // 🌟 1. 내 모든 채팅방 목록(사이드바용)을 불러오는 실시간 동기화 (버그 픽스)
   useEffect(() => {
     if (!isMounted) return;
-    const { auth, db } = require('@/lib/firebase');
-    const { collection, query, where, orderBy, onSnapshot } = require('firebase/firestore');
     
     let unsubscribeSnapshot: any = null;
     const unsubscribeAuth = auth.onAuthStateChanged((user: any) => {
@@ -148,8 +147,6 @@ export default function ChatScreen() {
   // 🌟 2. 선택된 방(Room ID)의 대화 기록만 불러오는 실시간 동기화 (버그 픽스)
   useEffect(() => {
     if (!isMounted || !currentRoomId) return;
-    const { auth, db } = require('@/lib/firebase');
-    const { collection, query, where, orderBy, onSnapshot } = require('firebase/firestore');
     
     let unsubscribeSnapshot: any = null;
     const unsubscribeAuth = auth.onAuthStateChanged((user: any) => {
@@ -166,8 +163,7 @@ export default function ChatScreen() {
 
   // 🌟 새 채팅방 만들기 함수
   const handleNewChat = async () => {
-    const { auth, db } = require('@/lib/firebase');
-    const { doc, setDoc, serverTimestamp } = require('firebase/firestore');
+    
     const user = auth.currentUser;
     if (!user) return;
     
@@ -416,8 +412,7 @@ export default function ChatScreen() {
     }
     
     // 🌟 [에러 해결] 여기서 단 한 번만 선언하고 아래에서는 재사용합니다!
-    const { auth, db } = require('@/lib/firebase');
-    const { collection, addDoc, doc, updateDoc, increment, serverTimestamp, setDoc } = require('firebase/firestore');
+    
     const user = auth.currentUser;
     
     if (user) {
