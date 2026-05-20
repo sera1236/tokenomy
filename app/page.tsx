@@ -25,6 +25,8 @@ const CodeBlock = ({ language, value, isEng, showPreview, onOpenPreview }: { lan
     setTimeout(() => setCopied(false), 2000);
   };
 
+  
+  
   return (
     <div className="relative group my-4 rounded-xl shadow-lg border border-[#333] bg-[#121212] w-full max-w-full" onDoubleClick={() => { if (language === 'html') onOpenPreview(value); }}>
       
@@ -574,6 +576,8 @@ export default function ChatScreen() {
       setIsLoading(false);
     }
   };
+
+  if (!isMounted) return null;
 return (
     <div 
       className="fixed inset-0 flex h-[100dvh] bg-[#121212] text-white overflow-hidden"
