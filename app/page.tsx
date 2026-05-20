@@ -115,6 +115,7 @@ export default function ChatScreen() {
   }, [selectedModel]);
   
   const [isMounted, setIsMounted] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   // 🌟 [대공사 1단계] 다중 채팅방 관리 상태 추가
   const [chatRooms, setChatRooms] = useState<any[]>([]);
@@ -133,7 +134,8 @@ export default function ChatScreen() {
     
     let unsubscribeSnapshot: any = null;
     const unsubscribeAuth = auth.onAuthStateChanged((user: any) => {
-      if (user) {
+  setCurrentUser(user); // 🌟 유저 상태 저장
+  if (user) {
         const q = query(collection(db, 'chat_rooms'), where('userId', '==', user.uid), orderBy('updatedAt', 'desc'));
         unsubscribeSnapshot = onSnapshot(q, (snapshot: any) => {
           const rooms = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
@@ -624,6 +626,18 @@ return (
             </button>
           ))}
         </div>
+        {/* 🌟 사이드바 맨 하단: 로그인 상태에 따라 바뀌는 스마트 버튼 */}
+        <div className="p-4 border-t border-[#2C2C2C] mt-auto shrink-0">
+          {currentUser ? (
+            <button onClick={() => router.push('/mypage')} className="w-full flex items-center justify-center gap-3 p-3 rounded-xl bg-[#2C2C2C] hover:bg-[#333] transition font-bold text-white shadow-md">
+              <User size={18} className="text-[#10B981]" /> 마이페이지 가기
+            </button>
+          ) : (
+            <button onClick={() => router.push('/login')} className="w-full flex items-center justify-center gap-3 p-3 rounded-xl bg-[#059669] hover:bg-[#047857] text-white font-bold transition shadow-lg">
+              <User size={18} /> 로그인 / 회원가입
+            </button>
+          )}
+        </div>
       </div>
       
       {/* 모바일 사이드바 배경 오버레이 */}
@@ -707,8 +721,7 @@ return (
 
         {/* 🌟 수정됨: pb-28을 추가하여 RootLayout의 하단 네비게이션(h-20) 위로 입력창을 안전하게 끌어올림 */}
         {/* 🌟 여백 대폭 축소 (p-4 -> px-4 pt-2 pb-20), gap-2 -> gap-1.5 */}
-        <div className="bg-[#121212] px-4 pt-2 pb-20 border-t border-[#2C2C2C] shrink-0 relative z-[60]">
-          
+        <div className="bg-[#121212] px-4 py-3 border-t border-[#2C2C2C] shrink-0"> 
           <div className="max-w-4xl mx-auto flex justify-between items-center mb-2">
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
               {[
