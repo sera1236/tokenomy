@@ -65,19 +65,11 @@ export default function TokenMarketScreen() {
   const userPoints = useStore((state) => state.userPoints);
   const setUserPoints = useStore((state) => state.setUserPoints);
 
-  const handleBuyClick = (apiType: string, apiKey: string) => {
-    const ticketPrice = 50; 
-    
-    if (userPoints < ticketPrice) {
-      alert(`포인트가 부족합니다! (현재 잔액: ${userPoints}원)`);
-      return;
-    }
-    
-    if (confirm(`입장료 ${ticketPrice}원이 차감됩니다. 입장하시겠습니까?`)) {
-      setUserPoints(userPoints - ticketPrice); 
-      setApiInfo(apiType, apiKey);
-      router.push('/chat');
-    }
+  const handleBuyClick = (apiType: string) => {
+    // 🌟 [대공사 4단계] 입장료 전면 무료화!
+    // 판매자의 특정 키에 묶이지 않도록 키값은 비워두어 백엔드 AMM(최저가 자동매칭)이 작동하게 합니다.
+    setApiInfo(apiType, ''); 
+    router.push('/chat');
   };
 
   const handleDelete = async (id: string) => {
@@ -105,8 +97,10 @@ export default function TokenMarketScreen() {
         ) : (
           <div className="flex flex-col gap-5">
             {/* 🌟 매물 필터 및 정렬 컨트롤 패널 */}
+      {/* 🌟 매물 필터 및 정렬 컨트롤 패널 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 bg-[#1A1A1A] p-4 rounded-2xl border border-[#2C2C2C] shadow-lg">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar w-full md:w-auto pb-1 md:pb-0">
+        {/* 🌟 [수정] 강제 스크롤 숨김 클래스 적용 및 부드러운 모션 추가 */}
+        <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {['All', 'GPT', 'Claude', 'Gemini', 'Grok', 'Llama'].map((model) => (
             <button
               key={model}
@@ -141,13 +135,18 @@ export default function TokenMarketScreen() {
       )}
 
       {/* 🌟 전체 매물 대신, 필터링이 완료된 매물(displayedItems)을 그려줍니다. */}
-      {displayedItems.map((item) => (
-              <TokenCard 
-                key={item.id} 
-                item={item} 
-                onBuyClick={() => handleBuyClick(item.apiType, item.apiKey)}
-                onDeleteClick={() => handleDelete(item.id)}
-              />
+      {displayedItems.map((item, index) => (
+              <div 
+                key={item.id}
+                className="animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out"
+                style={{ animationFillMode: 'both', animationDelay: `${index * 50}ms` }}
+              >
+                <TokenCard 
+                  item={item} 
+                  onBuyClick={() => handleBuyClick(item.apiType)}
+                  onDeleteClick={() => handleDelete(item.id)}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -191,11 +190,11 @@ function TokenCard({ item, onBuyClick, onDeleteClick }: { item: TokenItem, onBuy
 
           <button 
             onClick={onBuyClick}
-            className="flex items-center h-14 bg-gradient-to-r from-[#064E3B] to-[#059669] px-6 rounded-full hover:brightness-110 active:brightness-90 transition-all shadow-lg"
+            className="flex items-center h-14 bg-gradient-to-r from-[#064E3B] to-[#059669] px-6 rounded-full hover:brightness-110 active:brightness-90 transition-all shadow-lg group-hover:scale-105"
           >
             <Play size={18} fill="currentColor" className="text-white mr-2" />
             <span className="text-white font-black text-[15px]">
-              {item.price.toLocaleString()}원 입장
+              무료 입장 <span className="text-emerald-200 text-xs ml-1 font-medium">(채팅 10원)</span>
             </span>
           </button>
         </div>

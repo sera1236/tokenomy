@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/useStore';
-import { Send, ChevronLeft, Bot, Paperclip, X, Image as ImageIcon } from 'lucide-react';
+import { Send, ChevronLeft, Bot, Paperclip, X, Image as ImageIcon, Menu, Plus, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -78,46 +78,77 @@ const CodeBlock = ({ language, value, isEng, showPreview, onOpenPreview }: { lan
 
 export default function ChatScreen() {
   const router = useRouter();
-  const { currentApiKey, currentApiType } = useStore();
+  // 🌟 다기종 릴레이 채팅을 위해 전역 스토어의 종속성을 줄입니다.
+  const { currentApiKey, currentApiType, userPoints, setUserPoints } = useStore(); 
   
-  // 🌟 1번 요청: 영어 모드 상태
   const [isEng, setIsEng] = useState(false);
-
-  // 🌟 하이드레이션 에러 완벽 해결: 처음엔 빈 배열로 시작해 서버와 싱크를 맞추고, 마운트 직후에 기록을 불러옵니다.
+  // 🌟 [대공사 3단계] 실시간 모델 스위칭용 상태 및 콤보박스 리스트
+  const AVAILABLE_MODELS = ['GPT', 'Claude', 'Gemini', 'Grok', 'Llama'];
+  const [selectedModel, setSelectedModel] = useState(currentApiType || 'Claude');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMounted, setIsMounted] = useState(false);
 
-  // 🌟 [변경 코드] 임시 세션스토리지 대신, 파이어베이스 데이터베이스와 실시간 무인 동기화를 진행합니다.
+  // 🌟 [대공사 1단계] 다중 채팅방 관리 상태 추가
+  const [chatRooms, setChatRooms] = useState<any[]>([]);
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // 모바일 서랍 상태
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // 🌟 1. 내 모든 채팅방 목록(사이드바용)을 불러오는 실시간 동기화
   useEffect(() => {
-    if (!isMounted || !currentApiKey) return;
-
+    if (!isMounted) return;
     const { auth, db } = require('@/lib/firebase');
     const { collection, query, where, orderBy, onSnapshot } = require('firebase/firestore');
     const user = auth.currentUser;
-    
     if (!user) return;
 
-    // 내 UID와 현재 채팅 중인 API 키에 매칭되는 저장된 대화 데이터들을 시간순(asc)으로 실시간 스캔합니다.
-    const q = query(
-      collection(db, 'chats'),
-      where('userId', '==', user.uid),
-      where('apiKey', '==', currentApiKey),
-      orderBy('createdAt', 'asc')
-    );
+    const q = query(collection(db, 'chat_rooms'), where('userId', '==', user.uid), orderBy('updatedAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot: any) => {
+      const rooms = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+      setChatRooms(rooms);
+      // 처음 접속 시 방이 있으면 가장 최근 방 진입
+      if (rooms.length > 0 && !currentRoomId) setCurrentRoomId(rooms[0].roomId);
+    });
+    return () => unsubscribe();
+  }, [isMounted]);
 
+  // 🌟 2. 선택된 방(Room ID)의 대화 기록만 불러오는 실시간 동기화
+  useEffect(() => {
+    if (!isMounted || !currentRoomId) return;
+    const { auth, db } = require('@/lib/firebase');
+    const { collection, query, where, orderBy, onSnapshot } = require('firebase/firestore');
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const q = query(collection(db, 'chats'), where('userId', '==', user.uid), where('roomId', '==', currentRoomId), orderBy('createdAt', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot: any) => {
       const docs = snapshot.docs.map((doc: any) => doc.data());
-      if (docs.length > 0) {
-        setMessages(docs);
-      }
+      setMessages(docs);
     });
-
     return () => unsubscribe();
-  }, [currentApiKey, isMounted]);
+  }, [currentRoomId, isMounted]);
+
+  // 🌟 새 채팅방 만들기 함수
+  const handleNewChat = async () => {
+    const { auth, db } = require('@/lib/firebase');
+    const { doc, setDoc, serverTimestamp } = require('firebase/firestore');
+    const user = auth.currentUser;
+    if (!user) return;
+    
+    const newRoomId = `room_${Date.now()}`;
+    await setDoc(doc(db, 'chat_rooms', newRoomId), {
+      roomId: newRoomId,
+      userId: user.uid,
+      title: '새로운 대화',
+      updatedAt: serverTimestamp()
+    });
+    setCurrentRoomId(newRoomId);
+    setMessages([]); 
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -335,13 +366,7 @@ export default function ChatScreen() {
     });
   }, [messages]);
 
-  // 🌟 거래소에서 매물을 선택하지 않고 강제로 들어오면 튕겨냅니다.
-  useEffect(() => {
-    if (!currentApiKey) {
-      alert('거래소에서 매물을 먼저 선택해주세요!');
-      router.push('/');
-    }
-  }, [currentApiKey, router]);
+  // 🌟 [삭제됨] 이제 거래소 매물 선택 강제 튕김 로직을 제거합니다. (누구나 자유롭게 새 방 개설 가능)
 
   // 새로운 메시지가 추가될 때마다 스크롤을 맨 아래로 내려주는 마법
   useEffect(() => {
@@ -349,7 +374,23 @@ export default function ChatScreen() {
   }, [messages]);
 
   const handleSend = async () => {
-    if ((!input.trim() && attachedFiles.length === 0) || !currentApiKey) return;
+    if (!input.trim() && attachedFiles.length === 0) return;
+
+    // 🌟 [대공사 3단계] 건당 차감 (10원) 지갑 검사 및 실시간 차감
+    if (userPoints < 10) {
+      alert('포인트가 부족합니다. 충전 후 이용해주세요.');
+      return;
+    }
+    
+    // 🌟 [에러 해결] 여기서 단 한 번만 선언하고 아래에서는 재사용합니다!
+    const { auth, db } = require('@/lib/firebase');
+    const { collection, addDoc, doc, updateDoc, increment, serverTimestamp, setDoc } = require('firebase/firestore');
+    const user = auth.currentUser;
+    
+    if (user) {
+      setUserPoints(userPoints - 10); // 화면상 지갑 잔액 즉시 깎기
+      await updateDoc(doc(db, 'users', user.uid), { points: increment(-10) }); // DB 실제 차감
+    }
 
     // 🌟 사용자의 입력 메시지와 첨부파일 내용을 하나로 합칩니다.
     let finalPrompt = input.trim();
@@ -368,20 +409,39 @@ export default function ChatScreen() {
     setInput('');
     setAttachedFiles([]); 
     
-    // 🌟 이미지가 있으면 메시지 객체에 이미지 정보 포함하여 저장 (화면에 표시)
     // 🌟 전송 즉시 Firestore 'chats' 컬렉션에 유저의 메시지와 첨부 이미지 배열을 영구 누적합니다.
-    const { auth, db } = require('@/lib/firebase');
-    const { collection, addDoc, serverTimestamp } = require('firebase/firestore');
-    const user = auth.currentUser;
+    // 방이 없으면 하나 만들기 보장
+    let targetRoomId = currentRoomId;
+    if (!targetRoomId) {
+      targetRoomId = `room_${Date.now()}`;
+      await setDoc(doc(db, 'chat_rooms', targetRoomId), {
+        roomId: targetRoomId,
+        userId: user?.uid,
+        title: displayMsg.slice(0, 20) + (displayMsg.length > 20 ? '...' : ''),
+        updatedAt: serverTimestamp()
+      });
+      setCurrentRoomId(targetRoomId);
+    }
 
     await addDoc(collection(db, 'chats'), {
+      roomId: targetRoomId, // 🌟 방 ID 기준 저장
       userId: user?.uid,
-      apiKey: currentApiKey,
       role: 'user',
       content: displayMsg,
       attachedImages: imageFiles.length > 0 ? imageFiles : null,
       createdAt: serverTimestamp()
     });
+
+    // 🌟 방 제목이 '새로운 대화'면 유저의 첫 질문 내용으로 제목 자동 업데이트
+    const currentRoom = chatRooms.find(r => r.roomId === targetRoomId);
+    if (currentRoom && currentRoom.title === '새로운 대화') {
+      await updateDoc(doc(db, 'chat_rooms', targetRoomId), { 
+        title: displayMsg.slice(0, 20) + (displayMsg.length > 20 ? '...' : ''),
+        updatedAt: serverTimestamp()
+      });
+    } else if (currentRoom) {
+      await updateDoc(doc(db, 'chat_rooms', targetRoomId), { updatedAt: serverTimestamp() }); // 끌어올리기
+    }
 
     setIsLoading(true);
 
@@ -393,12 +453,13 @@ export default function ChatScreen() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: abortControllerRef.current.signal, // 🌟 중단 신호 연결
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           prompt: finalPrompt, 
-          encryptedApiKey: currentApiKey,
+          encryptedApiKey: currentApiKey || '', // 키가 없어도 됨 (백엔드가 최저가 찾아줌)
           history: contextHistory,
-          images: imageFiles
+          images: imageFiles,
+          requestedModel: selectedModel // 🌟 [대공사 3단계] 방금 드롭다운에서 고른 모델명 하청!
         })
       });
 
@@ -406,25 +467,21 @@ export default function ChatScreen() {
       const data = await res.json();
       const rawResponse = data.content?.[0]?.text || "응답이 없습니다.";
 
-      // 🌟 [에스크로 안전 환불 시스템] 자동 철거 메시지나 품절 안내가 감지되면 즉시 50원 반환
+      // 🌟 [에스크로 안전 환불 시스템] 자동 철거 메시지나 품절 안내가 감지되면 즉시 10원 반환
       if (rawResponse.includes('잔액이 소진되어') || rawResponse.includes('일시 품절')) {
         try {
-          const { auth, db } = require('@/lib/firebase');
-          const { doc, updateDoc, increment } = require('firebase/firestore');
-          const user = auth.currentUser;
-          
           if (user) {
-            // 1. 파이어베이스 DB에서 실제 유저의 포인트를 50원 다시 충전(원복)
+            // 1. 파이어베이스 DB에서 실제 유저의 포인트를 10원 다시 충전(원복)
             await updateDoc(doc(db, 'users', user.uid), {
-              points: increment(50)
+              points: increment(10)
             });
             
-            // 2. Zustand 전역 스토어 화면 포인트 잔액도 즉시 50원 복구
+            // 2. Zustand 전역 스토어 화면 포인트 잔액도 즉시 10원 복구
             const currentPoints = (useStore.getState() as any).userPoints || 0;
             if (typeof (useStore.getState() as any).setUserPoints === 'function') {
-              (useStore.getState() as any).setUserPoints(currentPoints + 50);
+              (useStore.getState() as any).setUserPoints(currentPoints + 10);
             }
-            alert("🚨 [안전 환불] 판매자 토큰 고갈이 감지되어 입장료 50원이 즉시 자동 환불되었습니다.");
+            alert("🚨 [안전 환불] 판매자 토큰 고갈이 감지되어 이용료 10원이 즉시 자동 환불되었습니다.");
           }
         } catch (refundErr) {
           console.error("에스크로 환불 처리 실패:", refundErr);
@@ -462,16 +519,12 @@ export default function ChatScreen() {
 
       // 🌟 AI의 타이핑 연출과 별개로, 최종 확정된 텍스트 답변을 데이터베이스에 영구 보존 처리합니다.
       if (!abortControllerRef.current.signal.aborted) {
-        const { auth, db } = require('@/lib/firebase');
-        const { collection, addDoc, serverTimestamp } = require('firebase/firestore');
-        const user = auth.currentUser;
-
         await addDoc(collection(db, 'chats'), {
+          roomId: targetRoomId,
           userId: user?.uid,
-          apiKey: currentApiKey,
           role: 'assistant',
           content: rawResponse,
-          apiType: currentApiType,
+          apiType: selectedModel, // 🌟 [대공사 3단계] 선택된 모델로 뱃지 및 색상 기록
           createdAt: serverTimestamp()
         });
       }
@@ -488,13 +541,42 @@ export default function ChatScreen() {
     }
   };
 return (
-    // 🌟 1, 2번 요청 해결: fixed inset-0 와 h-[100dvh]를 조합하여 화면 바깥으로 절대 벗어나지 않게 자물쇠를 채웁니다.
     <div 
       className="fixed inset-0 flex h-[100dvh] bg-[#121212] text-white overflow-hidden"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {/* 🌟 [대공사 1단계] 좌측 사이드바 (채팅방 리스트) 추가 */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#1A1A1A] border-r border-[#2C2C2C] transform transition-transform duration-300 md:relative md:translate-x-0 flex flex-col ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+        <div className="p-4 border-b border-[#2C2C2C] flex justify-between items-center h-[73px] shrink-0">
+          <h2 className="text-white font-black text-lg ml-2">AI 릴레이 챗</h2>
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-gray-400 hover:text-white p-2">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="p-4 shrink-0">
+          <button onClick={handleNewChat} className="w-full bg-[#059669] hover:bg-[#047857] text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition shadow-md">
+            <Plus size={18} /> 새 대화 시작
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-3 pb-4 space-y-2 no-scrollbar">
+          {chatRooms.map(room => (
+            <button 
+              key={room.roomId} 
+              onClick={() => { setCurrentRoomId(room.roomId); setIsSidebarOpen(false); }}
+              className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition flex items-center gap-3 truncate ${currentRoomId === room.roomId ? 'bg-[#059669]/20 text-[#10B981] border border-[#059669]/50 shadow-inner' : 'text-gray-400 hover:bg-[#252525] hover:text-gray-200'}`}
+            >
+              <MessageSquare size={16} className="shrink-0" />
+              <span className="truncate block flex-1">{room.title}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      {/* 모바일 사이드바 배경 오버레이 */}
+      {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
+
       {/* 🌟 2번 요청: 드래그 앤 드롭 오버레이 UI */}
       {isDragging && (
         <div className="absolute inset-0 z-[100] bg-[#059669]/20 backdrop-blur-sm border-4 border-dashed border-[#059669] flex items-center justify-center">
@@ -510,20 +592,32 @@ return (
       <div className={`flex flex-col ${showPreview ? 'hidden md:flex md:w-1/2' : 'w-full'} border-r border-[#2C2C2C] transition-all duration-500 h-full`}>
         <header className="flex items-center justify-between p-4 bg-[#1E1E1E] border-b border-[#2C2C2C] shrink-0">
           <div className="flex items-center">
-            <button onClick={() => router.back()} className="p-2 mr-2 text-gray-400 hover:text-white transition">
+            {/* 🌟 모바일 햄버거 메뉴 버튼 */}
+            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 mr-2 text-gray-400 hover:text-white transition">
+              <Menu size={24} />
+            </button>
+            <button onClick={() => router.push('/')} className="hidden md:block p-2 mr-2 text-gray-400 hover:text-white transition">
               <ChevronLeft size={24} />
             </button>
             <div>
-              <h1 className="text-lg font-black text-white flex items-center gap-2">
-                {currentApiType} 
-                <span className="text-[#059669] text-sm">{isEng ? 'Secured' : '보안 연결됨'}</span>
-                {/* 🌟 마케팅 포인트: 100% 공식 API 직결 인증 마크 (모델 바꿔치기 사기 방어) */}
-                <span className="px-2 py-0.5 bg-blue-500/20 border border-blue-400 text-blue-300 text-[10px] rounded-full uppercase tracking-widest hidden md:inline-block shadow-[0_0_10px_rgba(59,130,246,0.3)]">
-                  100% Official API 직결 (속임수 불가)
+              <div className="flex items-center gap-2">
+                {/* 🌟 [대공사 3단계] 실시간 모델 스위칭 콤보박스 (애플 감성) */}
+                <select 
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="bg-[#2C2C2C] text-white text-lg font-black px-3 py-1.5 rounded-xl outline-none border border-[#444] focus:border-[#059669] cursor-pointer shadow-lg appearance-none"
+                >
+                  {AVAILABLE_MODELS.map(model => (
+                    <option key={model} value={model}>{model}</option>
+                  ))}
+                </select>
+                <span className="text-[#059669] text-sm font-bold hidden md:inline-block">▼ {isEng ? 'Auto Match' : '최저가 자동매칭'}</span>
+                <span className="px-2 py-0.5 bg-blue-500/20 border border-blue-400 text-blue-300 text-[10px] rounded-full uppercase tracking-widest hidden lg:inline-block shadow-[0_0_10px_rgba(59,130,246,0.3)] ml-2">
+                  100% Official API 직결
                 </span>
-              </h1>
-              <p className="text-xs text-[#10B981] font-bold mt-1">
-                🔒 {isEng ? 'API Key encrypted and protected' : 'API Key 암호화 보호 중'}
+              </div>
+              <p className="text-[11px] text-[#10B981] font-bold mt-1.5 flex items-center gap-1">
+                🔒 {isEng ? 'Encrypted & Pay-per-prompt (10 KRW)' : '군사급 암호화 & 건당 10원 종량제 적용 중'}
               </p>
             </div>
           </div>
