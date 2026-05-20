@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/useStore';
-import { Send, ChevronLeft, Bot, Paperclip, X, Image as ImageIcon, Menu, Plus, MessageSquare } from 'lucide-react';
+import { Send, Bot, Paperclip, X, Image as ImageIcon, Menu, Plus, MessageSquare, User, Edit2, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, orderBy, onSnapshot, doc, setDoc, updateDoc, addDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, setDoc, updateDoc, addDoc, increment, serverTimestamp, deleteDoc } from 'firebase/firestore';
+
 
 interface Message {
   role: 'user' | 'assistant';
@@ -19,7 +20,7 @@ interface Message {
 }
 
 // 🌟 코드블록 개편: 카피 버튼 복구 및 개별 UI 프리뷰 렌더링 지원
-const CodeBlock = ({ language, value, isEng, showPreview, onOpenPreview }: { language: string, value: string, isEng: boolean, showPreview: boolean, onOpenPreview: (html: string) => void }) => {
+const CodeBlock = ({ language, value, showPreview, onOpenPreview }: { language: string, value: string, showPreview: boolean, onOpenPreview: (html: string) => void }) => {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(value);
@@ -58,7 +59,7 @@ const CodeBlock = ({ language, value, isEng, showPreview, onOpenPreview }: { lan
               onClick={() => onOpenPreview(value)} 
               className="px-6 py-3 bg-gradient-to-r from-[#059669] to-[#10B981] text-white rounded-full font-black shadow-[0_0_20px_rgba(5,150,105,0.6)] border border-[#34D399] flex items-center gap-2 whitespace-nowrap hover:scale-105 transition-transform animate-bounce"
             >
-              <span className="text-xl">✨</span> <span className="text-lg">{isEng ? 'Open UI' : '이 UI 보기'}</span>
+              <span className="text-xl">✨</span> <span className="text-lg">이 UI 보기</span>
             </button>
           </div>
         </div>
@@ -84,8 +85,6 @@ export default function ChatScreen() {
   const router = useRouter();
   // 🌟 다기종 릴레이 채팅을 위해 전역 스토어의 종속성을 줄입니다.
   const { currentApiKey, currentApiType, userPoints, setUserPoints } = useStore(); 
-  
-  const [isEng, setIsEng] = useState(false);
   // 🌟 [대공사 3단계] 실시간 모델 스위칭용 상태 및 콤보박스 리스트
   const AVAILABLE_MODELS = ['GPT', 'Claude', 'Gemini', 'Grok', 'Llama'];
   const [selectedModel, setSelectedModel] = useState(currentApiType || 'Claude');
@@ -93,11 +92,9 @@ export default function ChatScreen() {
 
   // 🌟 [추가] 실시간 최저가 탐지기 상태 및 로직
   const [lowestPrice, setLowestPrice] = useState<number | null>(null);
+  const [lowestPriceKey, setLowestPriceKey] = useState<string>(''); // 🌟 실제 최저가 키 보관
 
   useEffect(() => {
-  
-    
-    // DB에서 전체 매물을 실시간 스캔하여 현재 콤보박스에 선택된 모델의 최저가를 찾습니다.
     const unsubscribe = onSnapshot(collection(db, 'market_items'), (snapshot: any) => {
       const items = snapshot.docs.map((doc: any) => doc.data());
       const filtered = items.filter((item: any) => 
@@ -105,21 +102,27 @@ export default function ChatScreen() {
       );
       
       if (filtered.length > 0) {
-        const minPrice = Math.min(...filtered.map((i: any) => i.price || 0));
-        setLowestPrice(minPrice);
+        const minItem = filtered.reduce((prev: any, curr: any) => (prev.price < curr.price) ? prev : curr);
+        setLowestPrice(minItem.price);
+        setLowestPriceKey(minItem.apiKey); // 👉 최저가 암호화 키를 저장!
       } else {
-        setLowestPrice(null); // 매물이 없을 때
+        setLowestPrice(null); 
+        setLowestPriceKey('');
       }
     });
     return () => unsubscribe();
   }, [selectedModel]);
+  
   const [isMounted, setIsMounted] = useState(false);
 
   // 🌟 [대공사 1단계] 다중 채팅방 관리 상태 추가
   const [chatRooms, setChatRooms] = useState<any[]>([]);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // 모바일 서랍 상태
-
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
+  
+  // 🌟 채팅방 이름 변경/삭제 관련 상태
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -160,12 +163,10 @@ export default function ChatScreen() {
     });
     return () => { unsubscribeAuth(); if (unsubscribeSnapshot) unsubscribeSnapshot(); };
   }, [currentRoomId, isMounted]);
-
-  // 🌟 새 채팅방 만들기 함수
+// 🌟 새 채팅방 만들기 함수
   const handleNewChat = async () => {
-    
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) { alert('로그인이 필요합니다.'); return; }
     
     const newRoomId = `room_${Date.now()}`;
     await setDoc(doc(db, 'chat_rooms', newRoomId), {
@@ -177,6 +178,23 @@ export default function ChatScreen() {
     setCurrentRoomId(newRoomId);
     setMessages([]); 
     if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  // 🌟 채팅방 이름 변경 제출
+  const handleRenameSubmit = async (roomId: string) => {
+    if (!editTitle.trim()) { setEditingRoomId(null); return; }
+    await updateDoc(doc(db, 'chat_rooms', roomId), { title: editTitle });
+    setEditingRoomId(null);
+  };
+
+  // 🌟 채팅방 삭제
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!confirm('이 대화방을 삭제하시겠습니까? (채팅 기록도 모두 사라집니다)')) return;
+    await deleteDoc(doc(db, 'chat_rooms', roomId));
+    if (currentRoomId === roomId) {
+      setCurrentRoomId(null);
+      setMessages([]);
+    }
   };
 
   const [input, setInput] = useState('');
