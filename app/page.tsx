@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { auth, db } from '@/lib/firebase';
+const [isEng, setIsEng] = useState(false); // 이 한 줄 추가
 import { collection, query, where, orderBy, onSnapshot, doc, setDoc, updateDoc, addDoc, increment, serverTimestamp, deleteDoc } from 'firebase/firestore';
 
 
@@ -387,7 +388,7 @@ export default function ChatScreen() {
                     const match = /language-(\w+)/.exec(className || '');
                     const value = String(children).replace(/\n$/, '');
                     return !inline && match ? (
-                      <CodeBlock language={match[1]} value={value} isEng={isEng} showPreview={showPreview} onOpenPreview={(htmlCode) => { setPreviewHtml(htmlCode); setShowPreview(true); }} />
+                      <CodeBlock language={match[1]} value={value} showPreview={showPreview} onOpenPreview={(htmlCode) => { setPreviewHtml(htmlCode); setShowPreview(true); }} />
                     ) : (
                       <code className="bg-[#2C2C2C] text-[#10B981] px-1.5 py-0.5 rounded text-sm break-all" {...props}>{children}</code>
                     )
