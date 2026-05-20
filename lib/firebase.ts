@@ -1,8 +1,10 @@
-// 🌟 lib/firebase.ts
+'use client';
+
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
-// 이 설정값들은 .env.local 파일에서 자동으로 불러옵니다.
+// 🌟 안전하게 .env.local에서 대장님의 새 파이어베이스 프로젝트 키들을 매핑합니다.
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -12,9 +14,9 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-import { getAuth } from "firebase/auth";
-
-// 🌟 여기서 'export'를 해야 page.tsx에서 'db'와 'auth'를 가져다 쓸 수 있습니다.
+// 🌟 Next.js 가동 시 서버 사이드에서 중복으로 앱이 생성되어 터지는 현상을 완벽 방어합니다.
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+// 🌟 page.tsx를 비롯한 전 영역에서 긁어다 쓸 핵심 인스턴스 전역 개방!
 export const db = getFirestore(app);
 export const auth = getAuth(app);
