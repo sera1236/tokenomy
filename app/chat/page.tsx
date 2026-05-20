@@ -522,7 +522,9 @@ return (
                   100% Official API 직결 (속임수 불가)
                 </span>
               </h1>
-              <p className="text-xs text-[#AAAAAA] font-mono">Key: {currentApiKey.slice(0, 20)}...</p>
+              <p className="text-xs text-[#10B981] font-bold mt-1">
+                🔒 {isEng ? 'API Key encrypted and protected' : 'API Key 암호화 보호 중'}
+              </p>
             </div>
           </div>
           

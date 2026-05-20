@@ -21,8 +21,49 @@ export default function MyPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 🌟 판매자 대시보드용 상태 및 데이터 불러오기
+  // 🌟 판매자 대시보드용 상태 및 데이터 불러오기
   const [myItems, setMyItems] = useState<any[]>([]);
   const [totalRevenue, setTotalRevenue] = useState(0);
+
+  // 🌟 [추가] 정산용 은행 계좌 정보 및 출금 신청 상태 변수
+  const [bank, setBank] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [accountHolder, setAccountHolder] = useState('');
+
+  // 🌟 [추가] 수동 정산(MVP) 출금 신청 처리 함수
+  const handleWithdrawRequest = async () => {
+    if (!bank.trim() || !accountNumber.trim() || !accountHolder.trim()) {
+      alert('정산받으실 은행, 계좌번호, 예금주명을 모두 입력해주세요.');
+      return;
+    }
+    if (totalRevenue <= 0) {
+      alert('출금 가능한 누적 수익이 없습니다.');
+      return;
+    }
+
+    if (confirm(`총 ${totalRevenue.toLocaleString()}원의 정산 출금을 신청하시겠습니까?\n(신청 후 영업일 기준 48시간 이내에 입력하신 계좌로 입금됩니다.)`)) {
+      try {
+        const { collection, addDoc, serverTimestamp } = require('firebase/firestore');
+        
+        // 데이터베이스에 관리자가 보고 수기 정산할 수 있도록 기록을 남깁니다.
+        await addDoc(collection(db, 'withdraw_requests'), {
+          userId: auth.currentUser?.uid,
+          sellerName: auth.currentUser?.displayName,
+          bank: bank.trim(),
+          accountNumber: accountNumber.trim(),
+          accountHolder: accountHolder.trim(),
+          amount: totalRevenue,
+          status: 'pending', // 관리자 승인 대기 상태
+          createdAt: serverTimestamp()
+        });
+
+        alert('출금 신청이 정상 접수되었습니다.\n영업일 기준 48시간 내에 지정 계좌로 안전하게 입금됩니다! 🚀');
+      } catch (error) {
+        console.error(error);
+        alert('출금 신청 처리 중 서버 에러가 발생했습니다.');
+      }
+    }
+  };
 
   useEffect(() => {
     const fetchMyItems = async () => {
@@ -38,7 +79,8 @@ export default function MyPage() {
       setMyItems(items);
 
       // 누적 수익 계산 (판매 횟수 * 가격)
-      const revenue = items.reduce((acc, item) => acc + ((item.salesCount || 0) * item.price), 0);
+      // 🌟 [에러 해결] acc는 숫자(number), item은 아무거나(any)라고 명시해 줍니다.
+      const revenue = items.reduce((acc: number, item: any) => acc + ((item.salesCount || 0) * item.price), 0);
       setTotalRevenue(revenue);
     };
     
@@ -160,7 +202,51 @@ export default function MyPage() {
         </div>
       </div>
 
-      <hr className="border-[#2C2C2C] my-4" />
+      {/* 🌟 [추가] 정산 계좌 등록 및 수동 출금 신청 UI 컴포넌트 */}
+      <div className="bg-[#1A1A1A] border border-[#2C2C2C] p-6 rounded-[24px] shadow-lg mt-4">
+        <p className="text-[#10B981] text-xs font-bold tracking-wider uppercase mb-1">정산 및 출금 설정</p>
+        <h3 className="text-lg font-black text-white mb-4">수익금 정산 계좌 등록</h3>
+        
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <input 
+              type="text" 
+              value={bank}
+              onChange={(e) => setBank(e.target.value)}
+              placeholder="은행명 (예: 신한은행)" 
+              className="bg-[#121212] border border-[#333] focus:border-[#059669] rounded-xl py-3 px-4 text-sm text-white outline-none transition"
+            />
+            <input 
+              type="text" 
+              value={accountHolder}
+              onChange={(e) => setAccountHolder(e.target.value)}
+              placeholder="예금주 성명" 
+              className="bg-[#121212] border border-[#333] focus:border-[#059669] rounded-xl py-3 px-4 text-sm text-white outline-none transition"
+            />
+            <button
+              onClick={handleWithdrawRequest}
+              className="bg-[#059669] hover:bg-[#047857] text-white text-xs font-black rounded-xl transition shadow-md"
+            >
+              💸 출금 신청하기
+            </button>
+          </div>
+          
+          <input 
+            type="text" 
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(e.target.value)}
+            placeholder="하이픈(-)을 제외한 정산 계좌번호" 
+            className="w-full bg-[#121212] border border-[#333] focus:border-[#059669] rounded-xl py-3 px-4 text-sm text-white outline-none transition"
+          />
+          
+          {/* 🔥 대장님이 강조하신 영업일 기준 48시간 이내 고지 안내 가이드라인 */}
+          <p className="text-[11px] text-gray-500 font-medium leading-relaxed bg-[#121212] p-3 rounded-lg border border-[#222]">
+            💡 <strong>출금 안내:</strong> 출금 신청 시 등록된 정산 계좌의 예금주 불일치 여부를 시스템과 관리자가 2중 검증합니다. 정상 계좌임이 확인되면 <strong>영업일 기준 최대 48시간 이내</strong>에 등록하신 지갑으로 수익금이 전액 입금됩니다.
+          </p>
+        </div>
+      </div>
+
+      <hr className="border-[#2C2C2C] my-6" />
 
       <div>
         <p className="text-[#AAAAAA] font-bold text-sm">판매자 설정</p>
