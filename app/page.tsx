@@ -81,6 +81,36 @@ const CodeBlock = ({ language, value, showPreview, onOpenPreview }: { language: 
   );
 };
 
+const IntegratedMyPage = () => {
+  const [tab, setTab] = useState<'buyer' | 'seller'>('buyer');
+  const { userPoints } = useStore();
+  
+  return (
+    <div className="flex-1 overflow-y-auto p-8 bg-[#121212] text-white animate-in fade-in duration-300">
+      <h1 className="text-3xl font-black mb-8 text-[#10B981]">내 정보 관리</h1>
+      <div className="flex bg-[#1E1E1E] p-1 rounded-2xl mb-8 border border-[#2C2C2C] max-w-md">
+        <button onClick={() => setTab('buyer')} className={`flex-1 py-3 rounded-xl font-bold transition ${tab === 'buyer' ? 'bg-[#059669] text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>
+          💳 매수자 (토큰 사용)
+        </button>
+        <button onClick={() => setTab('seller')} className={`flex-1 py-3 rounded-xl font-bold transition ${tab === 'seller' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>
+          🏪 판매자 (API 등록)
+        </button>
+      </div>
+      {tab === 'buyer' ? (
+        <div className="bg-[#1E1E1E] p-6 rounded-3xl border border-[#2C2C2C]">
+          <h3 className="text-gray-400 font-bold mb-2">보유 토큰 잔액</h3>
+          <p className="text-4xl font-black text-white mb-4">{userPoints?.toLocaleString()} <span className="text-[#10B981]">KRW</span></p>
+        </div>
+      ) : (
+        <div className="bg-[#1E1E1E] p-6 rounded-3xl border border-[#2C2C2C]">
+          <h3 className="text-gray-400 font-bold mb-2">내 API 키 매물 관리</h3>
+          <p className="text-sm text-gray-500 py-8">등록된 API 키가 없습니다.</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function ChatScreen() {
   const router = useRouter();
   // 🌟 다기종 릴레이 채팅을 위해 전역 스토어의 종속성을 줄입니다.
@@ -121,6 +151,7 @@ export default function ChatScreen() {
   const [chatRooms, setChatRooms] = useState<any[]>([]);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
+  const [currentView, setCurrentView] = useState<'chat' | 'mypage'>('chat'); // 🌟 화면 전환용 상태 추가
   
   // 🌟 채팅방 이름 변경/삭제 관련 상태
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
@@ -508,7 +539,7 @@ export default function ChatScreen() {
         signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           prompt: finalPrompt, 
-          encryptedApiKey: currentApiKey || '', // 키가 없어도 됨 (백엔드가 최저가 찾아줌)
+          encryptedApiKey: currentApiKey || lowestPriceKey, // 🌟 백엔드가 못 찾으므로 프론트에서 탐색한 최저가 키를 직접 전송
           history: contextHistory,
           images: imageFiles,
           requestedModel: selectedModel // 🌟 [대공사 3단계] 방금 드롭다운에서 고른 모델명 하청!
@@ -629,8 +660,8 @@ return (
         {/* 🌟 사이드바 맨 하단: 로그인 상태에 따라 바뀌는 스마트 버튼 */}
         <div className="p-4 border-t border-[#2C2C2C] mt-auto shrink-0">
           {currentUser ? (
-            <button onClick={() => router.push('/mypage')} className="w-full flex items-center justify-center gap-3 p-3 rounded-xl bg-[#2C2C2C] hover:bg-[#333] transition font-bold text-white shadow-md">
-              <User size={18} className="text-[#10B981]" /> 마이페이지 가기
+            <button onClick={() => setCurrentView('mypage')} className={`w-full flex items-center justify-center gap-3 p-3 rounded-xl transition font-bold shadow-md ${currentView === 'mypage' ? 'bg-[#059669] text-white' : 'bg-[#2C2C2C] hover:bg-[#333] text-white'}`}>
+              <User size={18} className={currentView === 'mypage' ? 'text-white' : 'text-[#10B981]'} /> 마이페이지 가기
             </button>
           ) : (
             <button onClick={() => router.push('/login')} className="w-full flex items-center justify-center gap-3 p-3 rounded-xl bg-[#059669] hover:bg-[#047857] text-white font-bold transition shadow-lg">
@@ -665,16 +696,7 @@ return (
             {/* 🌟 (폭파 완료) 메인 대문이므로 불필요해진 뒤로가기 버튼은 완전히 삭제되었습니다. */}
             <div>
               <div className="flex items-center gap-2">
-                {/* 🌟 [대공사 3단계] 실시간 모델 스위칭 콤보박스 (애플 감성) */}
-                <select 
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="bg-[#2C2C2C] text-white text-lg font-black px-3 py-1.5 rounded-xl outline-none border border-[#444] focus:border-[#059669] cursor-pointer shadow-lg appearance-none"
-                >
-                  {AVAILABLE_MODELS.map(model => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
+                {/* 콤보박스는 아래 텍스트박스 위로 이동됨 */}
                 <span className="text-[#059669] text-[13px] font-bold hidden md:inline-block whitespace-nowrap ml-1">
                   ▼ {isEng ? 'Auto Match 100%' : '최저가 자동매칭 100%'} 
                   <span className="text-[#10B981] ml-1.5">
@@ -699,123 +721,123 @@ return (
             {isEng ? '🇰🇷 KO' : '🇺🇸 EN'}
           </button>
         </header>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 opacity-50">
-              <Bot size={56} className="mb-4 text-[#059669]" />
-              <p className="font-bold">{isEng ? 'Secure channel ready.' : '보안 통신이 준비되었습니다.'}</p>
-              <p className="text-sm">{isEng ? 'Keys are never exposed.' : '클라이언트 측 메모리에 API 키가 노출되지 않습니다.'}</p>
+{/* 🌟 대장님 여기에 꼼꼼히 분기를 쳐서 대화기록과 하단 입력창을 온전히 감쌌습니다. */}
+        {currentView === 'mypage' ? (
+          <IntegratedMyPage />
+        ) : (
+          <>
+            {/* 1. 대화창 본문 영역 */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 opacity-50">
+                  <Bot size={56} className="mb-4 text-[#059669]" />
+                  <p className="font-bold">{isEng ? 'Secure channel ready.' : '보안 통신이 준비되었습니다.'}</p>
+                  <p className="text-sm">{isEng ? 'Keys are never exposed.' : '클라이언트 측 메모리에 API 키가 노출되지 않습니다.'}</p>
+                </div>
+              )}
+              {renderedMessages}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-[#1E1E1E] border border-[#2C2C2C] text-[#059669] font-bold p-4 rounded-[24px] rounded-bl-sm animate-pulse">
+                    {isEng ? 'AI is thinking...' : 'AI가 뇌를 굴리고 있습니다...'}
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
-          )}
-          {renderedMessages}
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-[#1E1E1E] border border-[#2C2C2C] text-[#059669] font-bold p-4 rounded-[24px] rounded-bl-sm animate-pulse">
-                {isEng ? 'AI is thinking...' : 'AI가 뇌를 굴리고 있습니다...'}
+
+            {/* 2. 하단 입력 콘솔 및 툴바 영역 */}
+            <div className="bg-[#121212] p-4 border-t border-[#2C2C2C] shrink-0 z-[60]">
+              <div className="max-w-4xl mx-auto flex justify-between items-center mb-2">
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                  {[
+                    { ko: '🎨 그림', en: '🎨 Image', cmd: '/그림 ' },
+                    { ko: '🖥️ UI', en: '🖥️ UI Maker', cmd: '/화면 ' },
+                    { ko: '📊 다이어그램', en: '📊 Diagram', cmd: '/화면 Mermaid.js로 ' },
+                    { ko: '🧊 3D', en: '🧊 3D Art', cmd: '/화면 Three.js로 ' }
+                  ].map((chip) => (
+                    <button
+                      key={chip.ko}
+                      onClick={() => setInput(chip.cmd + input)}
+                      className="whitespace-nowrap px-3 py-1 rounded-full bg-[#1E1E1E] border border-[#333] text-[11px] text-gray-400 hover:border-[#059669] hover:text-white transition"
+                    >
+                      {isEng ? chip.en : chip.ko}
+                    </button>
+                  ))}
+                </div>
+                
+                {messages.length > 0 && !isLoading && (
+                  <button 
+                    onClick={handleRegenerate}
+                    className="whitespace-nowrap px-3 py-1 rounded-full bg-[#2C2C2C] text-[11px] text-[#10B981] font-bold hover:bg-[#333] transition ml-2"
+                  >
+                    🔄 {isEng ? 'Regenerate' : '재생성'}
+                  </button>
+                )}
+              </div>
+
+              {attachedFiles.length > 0 && (
+                <div className="max-w-4xl mx-auto flex flex-wrap gap-1.5 mb-2">
+                  {attachedFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center gap-1 bg-[#2C2C2C] border border-[#444] px-3 py-1.5 rounded-lg text-xs font-mono text-gray-300">
+                      <Paperclip size={12} className="text-[#059669]" />
+                      <span className="max-w-[150px] truncate">{file.name}</span>
+                      <button onClick={() => removeFile(idx)} className="ml-1 text-gray-500 hover:text-red-400 transition">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="max-w-4xl mx-auto flex gap-3 items-end relative mb-6">
+                <input 
+                  type="file" 
+                  multiple 
+                  ref={fileInputRef} 
+                  onChange={handleFileUpload} 
+                  className="hidden" 
+                  accept="image/png, image/jpeg, image/gif, image/webp, .txt, .html, .css, .js, .jsx, .ts, .tsx, .json, .md, .csv, application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
+                />
+                
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-[#1E1E1E] border border-[#333] text-gray-400 hover:text-white p-4 rounded-2xl hover:border-[#059669] transition-all flex items-center justify-center h-[56px] shrink-0"
+                  title="코드 또는 텍스트 파일 첨부"
+                >
+                  <Paperclip size={20} />
+                </button>
+
+                <textarea 
+                  ref={textareaRef} 
+                  rows={1}
+                  value={input}
+                  onChange={handleInputResize}
+                  onKeyDown={handleKeyDown}
+                  placeholder={isEng ? "Ask AI anything (Shift+Enter for new line)" : "AI에게 질문해보세요 (Shift+Enter로 줄바꿈)"}
+                  className="flex-1 bg-[#1E1E1E] border border-[#333] focus:border-[#059669] rounded-2xl px-6 py-4 outline-none transition text-white shadow-inner resize-none min-h-[56px] max-h-[150px] overflow-y-auto no-scrollbar"
+                />
+                
+                {isLoading ? (
+                  <button 
+                    onClick={handleStop}
+                    className="bg-red-500/20 border border-red-500 text-red-400 p-4 rounded-2xl hover:bg-red-500/30 transition-all flex items-center justify-center shadow-lg h-[56px] shrink-0"
+                  >
+                    ■
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => { handleSend(); if(textareaRef.current) textareaRef.current.style.height='auto'; }}
+                    disabled={isParsing || (!input.trim() && attachedFiles.length === 0)}
+                    className="bg-[#059669] disabled:bg-[#1E1E1E] disabled:text-gray-500 text-white p-4 rounded-2xl hover:bg-[#047857] transition-all flex items-center justify-center shadow-lg h-[56px] shrink-0"
+                  >
+                    <Send size={20} />
+                  </button>
+                )}
               </div>
             </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* 🌟 수정됨: pb-28을 추가하여 RootLayout의 하단 네비게이션(h-20) 위로 입력창을 안전하게 끌어올림 */}
-        {/* 🌟 여백 대폭 축소 (p-4 -> px-4 pt-2 pb-20), gap-2 -> gap-1.5 */}
-        <div className="bg-[#121212] p-4 border-t border-[#2C2C2C] shrink-0 z-[60]">
-          <div className="max-w-4xl mx-auto flex justify-between items-center mb-2">
-            <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-              {[
-                { ko: '🎨 그림', en: '🎨 Image', cmd: '/그림 ' },
-                { ko: '🖥️ UI', en: '🖥️ UI Maker', cmd: '/화면 ' },
-                { ko: '📊 다이어그램', en: '📊 Diagram', cmd: '/화면 Mermaid.js로 ' },
-                { ko: '🧊 3D', en: '🧊 3D Art', cmd: '/화면 Three.js로 ' }
-              ].map((chip) => (
-                <button
-                  key={chip.ko}
-                  onClick={() => setInput(chip.cmd + input)}
-                  className="whitespace-nowrap px-3 py-1 rounded-full bg-[#1E1E1E] border border-[#333] text-[11px] text-gray-400 hover:border-[#059669] hover:text-white transition"
-                >
-                  {isEng ? chip.en : chip.ko}
-                </button>
-              ))}
-            </div>
-            
-            {/* 🌟 재생성 버튼 추가 */}
-            {messages.length > 0 && !isLoading && (
-              <button 
-                onClick={handleRegenerate}
-                className="whitespace-nowrap px-3 py-1 rounded-full bg-[#2C2C2C] text-[11px] text-[#10B981] font-bold hover:bg-[#333] transition ml-2"
-              >
-                🔄 {isEng ? 'Regenerate' : '재생성'}
-              </button>
-            )}
-          </div>
-          
-
-          {/* 🌟 첨부된 파일 미리보기 칩 영역 */}
-          {attachedFiles.length > 0 && (
-            <div className="max-w-4xl mx-auto flex flex-wrap gap-1.5 mb-2">
-              {attachedFiles.map((file, idx) => (
-                <div key={idx} className="flex items-center gap-1 bg-[#2C2C2C] border border-[#444] px-3 py-1.5 rounded-lg text-xs font-mono text-gray-300">
-                  <Paperclip size={12} className="text-[#059669]" />
-                  <span className="max-w-[150px] truncate">{file.name}</span>
-                  <button onClick={() => removeFile(idx)} className="ml-1 text-gray-500 hover:text-red-400 transition">
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="max-w-4xl mx-auto flex gap-3 items-end relative mb-6">
-            {/* 🌟 숨겨진 파일 입력창 (PDF, DOCX 추가 확장) */}
-            {/* 🌟 accept 속성을 정밀하게 가다듬어 OS 파일 탐색기 단계에서부터 불량 포맷을 원천 봉쇄합니다. */}
-            <input 
-              type="file" 
-              multiple 
-              ref={fileInputRef} 
-              onChange={handleFileUpload} 
-              className="hidden" 
-              accept="image/png, image/jpeg, image/gif, image/webp, .txt, .html, .css, .js, .jsx, .ts, .tsx, .json, .md, .csv, application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
-            />
-            
-            {/* 🌟 파일 첨부 클립 버튼 */}
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-[#1E1E1E] border border-[#333] text-gray-400 hover:text-white p-4 rounded-2xl hover:border-[#059669] transition-all flex items-center justify-center h-[56px] shrink-0"
-              title="코드 또는 텍스트 파일 첨부"
-            >
-              <Paperclip size={20} />
-            </button>
-
-            <textarea 
-              ref={textareaRef} 
-              rows={1}
-              value={input}
-              onChange={handleInputResize}
-              onKeyDown={handleKeyDown}
-              placeholder={isEng ? "Ask AI anything (Shift+Enter for new line)" : "AI에게 질문해보세요 (Shift+Enter로 줄바꿈)"}
-              className="flex-1 bg-[#1E1E1E] border border-[#333] focus:border-[#059669] rounded-2xl px-6 py-4 outline-none transition text-white shadow-inner resize-none min-h-[56px] max-h-[150px] overflow-y-auto no-scrollbar"
-            />
-            {/* 🌟 로딩 중이면 중단(Stop) 버튼, 아니면 전송 버튼 */}
-            {isLoading ? (
-              <button 
-                onClick={handleStop}
-                className="bg-red-500/20 border border-red-500 text-red-400 p-4 rounded-2xl hover:bg-red-500/30 transition-all flex items-center justify-center shadow-lg h-[56px] shrink-0"
-              >
-                ■
-              </button>
-            ) : (
-              <button 
-                onClick={() => { handleSend(); if(textareaRef.current) textareaRef.current.style.height='auto'; }}
-                disabled={isParsing || (!input.trim() && attachedFiles.length === 0)}
-                className="bg-[#059669] disabled:bg-[#1E1E1E] disabled:text-gray-500 text-white p-4 rounded-2xl hover:bg-[#047857] transition-all flex items-center justify-center shadow-lg h-[56px] shrink-0"
-              >
-                <Send size={20} />
-              </button>
-            )}
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
       {/* 우측: 실시간 HTML 프리뷰 */}

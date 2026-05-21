@@ -16,6 +16,7 @@ export default function Login() {
   const [tempUser, setTempUser] = useState<any>(null);
   const [nickname, setNickname] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(false);
+  const [showTermsDetail, setShowTermsDetail] = useState(false); // 🌟 약관 아코디언 상태
 const handleGoogleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
@@ -103,17 +104,35 @@ const handleGoogleLogin = async () => {
                 />
               </div>
               
-              <label className="flex items-center gap-3 cursor-pointer mt-4 bg-[#121212] p-4 rounded-xl border border-[#333]">
-                <input 
-                  type="checkbox" 
-                  checked={agreeTerms}
-                  onChange={(e) => setAgreeTerms(e.target.checked)}
-                  className="w-5 h-5 accent-[#059669] shrink-0"
-                />
-                <span className="text-[13px] text-gray-300 leading-snug">
-                  [필수] 만 14세 이상이며, 서비스 이용약관 및 개인정보 처리방침에 동의합니다.
-                </span>
-              </label>
+              <div className="mt-4 bg-[#121212] rounded-xl border border-[#333] overflow-hidden transition-all">
+                <div className="flex items-center justify-between p-4">
+                  <label className="flex items-center gap-3 cursor-pointer flex-1">
+                    <input 
+                      type="checkbox" 
+                      checked={agreeTerms}
+                      onChange={(e) => setAgreeTerms(e.target.checked)}
+                      className="w-5 h-5 accent-[#059669] shrink-0"
+                    />
+                    <span className="text-[13px] text-gray-300 font-bold">
+                      [필수] 서비스 이용약관 및 개인정보 처리방침 동의
+                    </span>
+                  </label>
+                  <button 
+                    onClick={() => setShowTermsDetail(!showTermsDetail)}
+                    className="p-1 text-gray-500 hover:text-white transition"
+                  >
+                    {showTermsDetail ? '▲ 닫기' : '▼ 보기'}
+                  </button>
+                </div>
+                
+                {showTermsDetail && (
+                  <div className="px-4 pb-4 border-t border-[#333] bg-[#1A1A1A]">
+                    <div className="h-32 overflow-y-auto whitespace-pre-wrap text-[11px] text-gray-400 p-2 mt-2 font-mono">
+                      {`제1조 (목적)\n본 약관은 토크노미 서비스(이하 "서비스")를 이용함에 있어 회사와 회원 간의 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.\n\n제2조 (포인트 및 결제)\n1. 회원은 서비스를 통해 AI 모델 API를 호출할 때마다 규정된 포인트를 차감당합니다.\n2. 서비스 생태계는 사용자의 디지털 뇌 부담(digital burden on the brain)을 완화하는 건전한 지식 소비를 지향합니다.\n\n제3조 (판매자 등록 및 책임)\n1. 자신의 API 키를 등록하여 수익을 창출하는 판매자는 해당 키의 안정성에 대한 1차적 책임을 집니다.`}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <button 
                 onClick={handleCompleteRegistration}
