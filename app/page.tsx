@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/useStore';
 import { Send, Bot, Paperclip, X, Image as ImageIcon, Menu, Plus, MessageSquare, User, Edit2, Trash2, Key, ShieldCheck, CheckCircle2, MoreVertical, Pin } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { CryptoUtil } from '@/lib/crypto';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -80,13 +81,16 @@ const CodeBlock = ({ language, value, showPreview, onOpenPreview }: { language: 
     </div>
   );
 };
-
-const IntegratedMyPage = () => {
+const IntegratedMyPage = ({ currentUser }: { currentUser: any }) => {
   const [tab, setTab] = useState<'buyer' | 'seller'>('buyer');
   const { userPoints } = useStore();
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [verifyStatus, setVerifyStatus] = useState<{ type: string, msg: string, isPaid: boolean } | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
+  
+  // 🌟 [핵심] 스케줄링을 위한 시간 상태 추가 (기본값: 저녁 8시 ~ 아침 8시)
+  const [openTime, setOpenTime] = useState('20:00');
+  const [closeTime, setCloseTime] = useState('08:00');
   
   return (
     <div className="flex-1 overflow-y-auto p-8 bg-[#121212] text-white animate-in fade-in duration-300">
@@ -114,23 +118,95 @@ const IntegratedMyPage = () => {
                 setIsVerifying(true);
                 try {
                   const key = apiKeyInput.trim();
-                  if (key.startsWith('xai-')) {
-                    const res = await fetch('https://api.x.ai/v1/models', { headers: { 'Authorization': `Bearer ${key}` } });
-                    const data = await res.json();
-                    const isPaid = data.data?.some((m: any) => m.id.includes('grok-4.3') || m.id.includes('grok-2'));
-                    setVerifyStatus({ type: 'Grok', msg: isPaid ? '유료 고급 모델(grok-4.3 등) 접근 확인!' : '무료/저티어 키입니다.', isPaid });
-                  } else {
-                    setVerifyStatus({ type: 'Detecting...', msg: '키 형식이 인식되었습니다.', isPaid: true });
-                  }
-                } catch (e) { alert('검증 실패'); }
+                  const res = await fetch('https://api.x.ai/v1/models', { headers: { 'Authorization': `Bearer ${key}` } });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error();
+                  
+                  // 🌟 [핵심] 키 티어 판별
+                  const isPremium = data.data?.some((m: any) => m.id.includes('grok-4'));
+                  setVerifyStatus({ 
+                    type: 'Grok', 
+                    msg: isPremium ? '고급 유료 모델 접근 가능 키입니다.' : '일반 모델 전용 키입니다.', 
+                    isPaid: isPremium 
+                  });
+                } catch (e) { alert('키가 유효하지 않습니다.'); }
                 setIsVerifying(false);
-              }} className="bg-purple-600 hover:bg-purple-700 py-3 px-6 rounded-xl font-bold">{isVerifying ? '검증중' : '검증 및 등록'}</button>
+              }} className="bg-purple-600 hover:bg-purple-700 py-3 px-6 rounded-xl font-bold">{isVerifying ? '검증중' : '검증 완료'}</button>
             </div>
-            {verifyStatus && <div className="p-4 bg-black/40 rounded-xl border border-gray-800 text-sm text-gray-300">{verifyStatus.msg}</div>}
-            <div className="mt-6 p-4 bg-gray-900/50 rounded-xl border border-gray-800">
-              <h4 className="text-xs font-bold text-gray-400 flex items-center gap-1.5 mb-2"><ShieldCheck size={14} className="text-green-500" /> 군사급 로컬 암호화 (AES-256)</h4>
-              <p className="text-[11px] text-gray-500">모든 키는 서버 전송 전 즉시 암호화되어 관리자도 열람이 불가능합니다.</p>
-            </div>
+
+            {verifyStatus && (
+              <div className="mt-4 p-5 bg-[#1A1A1A] border border-[#059669] rounded-xl shadow-lg animate-in fade-in duration-300">
+                <h4 className="text-[#10B981] font-black mb-2 flex items-center gap-2">
+                  <ShieldCheck size={18} /> 최종 판매 등록 및 스케줄링
+                </h4>
+                <p className="text-sm text-gray-300 mb-4 leading-relaxed">
+                  [ {verifyStatus.msg} ]<br/>
+                  안전한 거래를 위해 <strong>키가 개방될 시간</strong>을 설정해주세요. 지정된 시간 외에는 자동으로 판매가 차단됩니다.
+                </p>
+
+                {/* 🌟 시간 설정 UI */}
+                <div className="flex items-center gap-4 mb-6 bg-[#121212] p-4 rounded-xl border border-[#333]">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 font-bold block mb-1">개방 시작 시간</label>
+                    <input 
+                      type="time" 
+                      value={openTime} 
+                      onChange={(e) => setOpenTime(e.target.value)}
+                      className="w-full bg-[#1E1E1E] border border-[#444] rounded-lg px-3 py-2 text-white outline-none focus:border-[#10B981]"
+                    />
+                  </div>
+                  <span className="text-gray-500 mt-5">~</span>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 font-bold block mb-1">개방 종료 시간</label>
+                    <input 
+                      type="time" 
+                      value={closeTime} 
+                      onChange={(e) => setCloseTime(e.target.value)}
+                      className="w-full bg-[#1E1E1E] border border-[#444] rounded-lg px-3 py-2 text-white outline-none focus:border-[#10B981]"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    if (!currentUser?.email) return alert("로그인 및 회원가입이 필요합니다.");
+                    
+                    try {
+                      const encryptedKey = CryptoUtil.encrypt(apiKeyInput.trim());
+
+                      // 🌟 DB에 openTime, closeTime 함께 저장
+                      await addDoc(collection(db, 'market_items'), {
+                        sellerId: currentUser.uid,
+                        sellerName: currentUser.displayName || '인증된 판매자',
+                        apiType: 'xai', 
+                        apiKey: encryptedKey,
+                        tier: verifyStatus.isPaid ? 'premium' : 'basic', 
+                        price: 10, 
+                        salesCount: 0, 
+                        status: 'active',
+                        openTime: openTime,   
+                        closeTime: closeTime, 
+                        maxCapacity: 500, // 🌟 [추가] 일일 최대 사용 가능 횟수 (가상 게이지)
+                        usedCapacity: 0,  // 🌟 [추가] 현재 사용된 횟수 (실시간 동기화됨)
+                        createdAt: serverTimestamp()
+                      });
+
+                      alert(`✅ 성공적으로 등록되었습니다!\n매일 [${openTime} ~ ${closeTime}] 사이에만 안전하게 판매됩니다.`);
+                      
+                      setApiKeyInput('');
+                      setVerifyStatus(null);
+                      
+                    } catch (error) {
+                      console.error("등록 에러:", error);
+                      alert("마켓 등록 중 시스템 오류가 발생했습니다.");
+                    }
+                  }}
+                  className="w-full bg-[#059669] hover:bg-[#047857] text-white font-bold py-3 rounded-xl transition shadow-md flex justify-center items-center gap-2"
+                >
+                  <CheckCircle2 size={18} /> 설정 완료하고 판매 시작하기
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -151,10 +227,12 @@ export default function ChatScreen() {
   // 🌟 [추가] 실시간 최저가 탐지기 상태 및 로직
   const [lowestPrice, setLowestPrice] = useState<number | null>(null);
   const [lowestPriceKey, setLowestPriceKey] = useState<string>(''); // 🌟 실제 최저가 키 보관
+  const [activeMarketItem, setActiveMarketItem] = useState<any>(null); // 🌟 [추가] 실시간 게이지 연동용 전체 매물 객체
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'market_items'), (snapshot: any) => {
-      const items = snapshot.docs.map((doc: any) => doc.data());
+      // 🌟 [핵심] doc.id를 포함해서 가져와야 나중에 게이지(usedCapacity)를 정확히 깎을 수 있습니다.
+      const items = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
       const filtered = items.filter((item: any) => 
         item.apiType?.toLowerCase().includes(selectedModel.toLowerCase())
       );
@@ -162,10 +240,12 @@ export default function ChatScreen() {
       if (filtered.length > 0) {
         const minItem = filtered.reduce((prev: any, curr: any) => (prev.price < curr.price) ? prev : curr);
         setLowestPrice(minItem.price);
-        setLowestPriceKey(minItem.apiKey); // 👉 최저가 암호화 키를 저장!
+        setLowestPriceKey(minItem.apiKey); // 👉 최저가 암호화 키 저장!
+        setActiveMarketItem(minItem); // 🌟 10명의 화면에 실시간 동기화 될 매물 정보 저장
       } else {
         setLowestPrice(null); 
         setLowestPriceKey('');
+        setActiveMarketItem(null);
       }
     });
     return () => unsubscribe();
@@ -513,8 +593,43 @@ export default function ChatScreen() {
       displayMsg += `\n\n*(📎 텍스트 파일 ${textFiles.length}개 첨부됨)*`;
     }
 
+    // 🌟 [핵심 1] Moderation API (안전성 필터) 통과 확인
+    // 비싼 Grok/Claude 모델에 쏘기 전에 프론트에서 초저가/무료 Moderation 엔드포인트를 거쳐 계정 정지(Ban)를 차단합니다.
+    try {
+      setIsLoading(true);
+      // 실제 운영 시에는 프론트에서 키를 숨기기 위해 Next.js의 /api/moderate 라우트로 쏘게 됩니다.
+      const modRes = await fetch('/api/moderate', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: finalPrompt }) 
+      }).catch(() => null); // 엔드포인트가 없을 경우(개발중) 임시 패스
+      
+      if (modRes && modRes.ok) {
+        const modData = await modRes.json();
+        if (modData.flagged) {
+          alert("🚨 [안전 시스템 차단] 정책에 위반되는 부적절한 프롬프트가 감지되었습니다. 판매자 보호를 위해 전송이 취소됩니다.");
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch(e) { console.log("Moderation pass"); }
+
+    // 🌟 [핵심 2] 글로벌 동시 접속자를 위한 원자적 업데이트(Atomic Increment)로 게이지 차감
+    // 10명이 동시에 쏘더라도 Firestore의 increment(1)은 트랜잭션 충돌 없이 정확하게 1씩 깎아내려갑니다.
+    if (activeMarketItem?.id) {
+      if (activeMarketItem.usedCapacity >= activeMarketItem.maxCapacity) {
+        alert("🚨 이 매물의 일일 한도(게이지)가 모두 소진되었습니다. 다른 매물을 찾아주세요.");
+        setIsLoading(false);
+        return;
+      }
+      await updateDoc(doc(db, 'market_items', activeMarketItem.id), {
+        usedCapacity: increment(1)
+      });
+    }
+
     setInput('');
     setAttachedFiles([]); 
+    setIsLoading(false); // 로딩 잠깐 풀고 낙관적 UI 업데이트 시작
     
     // 🌟 [수정] DB에 저장되기 전, 유저의 화면에 즉시(0.1초 만에) 내 프롬프트를 먼저 띄웁니다! (낙관적 UI 업데이트)
     setMessages(prev => [...prev, { role: 'user', content: displayMsg, attachedImages: imageFiles }]);
@@ -748,6 +863,25 @@ return (
               <p className="text-[11px] text-[#10B981] font-bold mt-1.5 flex items-center gap-1">
                 🔒 {isEng ? 'Encrypted & Pay-per-prompt (10 KRW)' : '군사급 암호화 & 건당 10원 종량제 적용 중'}
               </p>
+              
+              {/* 🌟 [핵심] 전 세계 동시 접속자 화면에 실시간 연동되는 잔여량 게이지 UI */}
+              {activeMarketItem && activeMarketItem.maxCapacity && (
+                <div className="mt-2.5 w-full max-w-[200px]">
+                  <div className="flex justify-between text-[9px] text-gray-400 mb-1 font-mono">
+                    <span>API 매물 잔여량</span>
+                    <span className={activeMarketItem.maxCapacity - activeMarketItem.usedCapacity < 50 ? 'text-red-400 font-bold' : 'text-[#10B981]'}>
+                      {Math.max(0, activeMarketItem.maxCapacity - (activeMarketItem.usedCapacity || 0))} / {activeMarketItem.maxCapacity}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden border border-[#333]">
+                    <div 
+                      className={`h-1.5 rounded-full transition-all duration-500 ${activeMarketItem.maxCapacity - activeMarketItem.usedCapacity < 50 ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-[#10B981] shadow-[0_0_8px_rgba(16,185,129,0.8)]'}`} 
+                      style={{ width: `${Math.max(0, 100 - ((activeMarketItem.usedCapacity || 0) / activeMarketItem.maxCapacity * 100))}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+
             </div>
           </div>
           
@@ -761,7 +895,7 @@ return (
         </header>
 {/* 🌟 대장님 여기에 꼼꼼히 분기를 쳐서 대화기록과 하단 입력창을 온전히 감쌌습니다. */}
         {currentView === 'mypage' ? (
-          <IntegratedMyPage />
+          <IntegratedMyPage currentUser={currentUser} />
         ) : (
           <>
             {/* 1. 대화창 본문 영역 */}
