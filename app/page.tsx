@@ -220,8 +220,12 @@ export default function ChatScreen() {
   const [isEng, setIsEng] = useState(false);
   const { currentApiKey, currentApiType, userPoints, setUserPoints } = useStore(); 
   // 🌟 [대공사 3단계] 실시간 모델 스위칭용 상태 및 콤보박스 리스트
-  const AVAILABLE_MODELS = ['GPT', 'Claude', 'Gemini', 'Grok', 'Llama'];
-  const [selectedModel, setSelectedModel] = useState(currentApiType || 'Claude');
+  const AVAILABLE_MODELS = ['openai', 'claude', 'gemini', 'xai', 'groq', 'openrouter']; // DB의 apiType과 일치시킵니다.
+  // 사용자가 보기 편한 라벨 매핑
+  const MODEL_LABELS: Record<string, string> = {
+    'openai': 'GPT', 'claude': 'Claude', 'gemini': 'Gemini', 'xai': 'Grok', 'groq': 'Llama (Groq)', 'openrouter': 'OpenRouter'
+  };
+  const [selectedModel, setSelectedModel] = useState('xai'); // 기본값을 우선 xai로 둡니다.
   const [messages, setMessages] = useState<Message[]>([]);
 
   // 🌟 [추가] 실시간 최저가 탐지기 상태 및 로직
@@ -989,7 +993,7 @@ return (
               <div className="absolute right-3 bottom-3 flex items-center gap-2">
                 <div className="flex items-center bg-[#121212] px-2 py-1 rounded-lg border border-[#444]">
                   <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} className="bg-transparent text-[11px] font-bold text-[#10B981] outline-none cursor-pointer appearance-none">
-                    {AVAILABLE_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                    {AVAILABLE_MODELS.map(m => <option key={m} value={m}>{MODEL_LABELS[m]}</option>)}
                   </select>
                   <span className="text-[10px] text-gray-500 ml-1">▼</span>
                 </div>
