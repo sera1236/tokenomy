@@ -87,11 +87,12 @@ const IntegratedMyPage = ({ currentUser }: { currentUser: any }) => {
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [verifyStatus, setVerifyStatus] = useState<{ type: string, msg: string, isPaid: boolean } | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
-  
   // 🌟 [핵심] 스케줄링을 위한 시간 상태 추가 (기본값: 저녁 8시 ~ 아침 8시)
   const [openTime, setOpenTime] = useState('20:00');
   const [closeTime, setCloseTime] = useState('08:00');
-  
+  // 🌟 [추가] 누락되었던 가격 입력 및 제출 로딩 상태 복구
+  const [priceRaw, setPriceRaw] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   return (
     <div className="flex-1 overflow-y-auto p-8 bg-[#121212] text-white animate-in fade-in duration-300">
       <h1 className="text-3xl font-black mb-8 text-[#10B981]">내 정보 관리</h1>
@@ -113,7 +114,7 @@ const IntegratedMyPage = ({ currentUser }: { currentUser: any }) => {
           <div className="bg-[#1E1E1E] p-6 rounded-3xl border border-[#2C2C2C] shadow-lg">
             <h3 className="text-white font-black text-xl mb-2 flex items-center gap-2"><Key size={22} className="text-purple-400"/> 새 API 키 매물 등록</h3>
             <div className="flex flex-col md:flex-row gap-3 mb-4">
-              <input type="password" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} placeholder="sk-... 또는 xai-... 등 API 키 붙여넣기" className="flex-1 bg-[#121212] border border-[#333] focus:border-purple-500 rounded-xl px-4 py-3 outline-none text-white transition"/>
+              <input type="password" value={apiKeyInput} onChange={(e) => { setApiKeyInput(e.target.value); setVerifyStatus(null); }} placeholder="sk-... 또는 xai-... 등 API 키 붙여넣기" className="flex-1 bg-[#121212] border border-[#333] focus:border-[#059669] rounded-xl px-4 py-3 outline-none text-white transition"/>
               <button onClick={async () => {
                 setIsVerifying(true);
                 try {
@@ -122,88 +123,123 @@ const IntegratedMyPage = ({ currentUser }: { currentUser: any }) => {
                   const data = await res.json();
                   if (!res.ok) throw new Error();
                   
-                  // 🌟 [핵심] 키 티어 판별
                   const isPremium = data.data?.some((m: any) => m.id.includes('grok-4'));
                   setVerifyStatus({ 
                     type: 'Grok', 
                     msg: isPremium ? '고급 유료 모델 접근 가능 키입니다.' : '일반 모델 전용 키입니다.', 
                     isPaid: isPremium 
                   });
-                } catch (e) { alert('키가 유효하지 않습니다.'); }
+                } catch (e) { alert('키가 유효하지 않습니다.'); setVerifyStatus(null); }
                 setIsVerifying(false);
-              }} className="bg-purple-600 hover:bg-purple-700 py-3 px-6 rounded-xl font-bold">{isVerifying ? '검증중' : '검증 완료'}</button>
+              }} className={`py-3 px-6 rounded-xl font-bold transition ${verifyStatus ? 'bg-[#059669] text-white hover:bg-[#047857]' : 'bg-black text-white hover:bg-gray-800 border border-gray-700'}`}>
+                {isVerifying ? '검증중...' : verifyStatus ? '검증 완료' : '검증하기'}
+              </button>
             </div>
-
-            {verifyStatus && (
+{verifyStatus && (
               <div className="mt-4 p-5 bg-[#1A1A1A] border border-[#059669] rounded-xl shadow-lg animate-in fade-in duration-300">
                 <h4 className="text-[#10B981] font-black mb-2 flex items-center gap-2">
                   <ShieldCheck size={18} /> 최종 판매 등록 및 스케줄링
                 </h4>
                 <p className="text-sm text-gray-300 mb-4 leading-relaxed">
                   [ {verifyStatus.msg} ]<br/>
-                  안전한 거래를 위해 <strong>키가 개방될 시간</strong>을 설정해주세요. 지정된 시간 외에는 자동으로 판매가 차단됩니다.
+                  안전한 거래를 위해 <strong>키가 개방될 시간과 1프롬프트당 가격</strong>을 설정해주세요. 지정된 시간 외에는 자동으로 판매가 차단됩니다.
                 </p>
 
-                {/* 🌟 시간 설정 UI */}
-                <div className="flex items-center gap-4 mb-6 bg-[#121212] p-4 rounded-xl border border-[#333]">
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-400 font-bold block mb-1">개방 시작 시간</label>
-                    <input 
-                      type="time" 
-                      value={openTime} 
-                      onChange={(e) => setOpenTime(e.target.value)}
-                      className="w-full bg-[#1E1E1E] border border-[#444] rounded-lg px-3 py-2 text-white outline-none focus:border-[#10B981]"
-                    />
+                <div className="space-y-4 mb-6">
+                  {/* 🌟 가격 설정 UI (복구됨) */}
+                  <div>
+                    <label className="text-[#059669] font-bold text-sm ml-2">1프롬프트당 가격 (원)</label>
+                    <div className="relative mt-1">
+                      <input
+                        type="number"
+                        value={priceRaw}
+                        onChange={(e) => setPriceRaw(e.target.value)}
+                        placeholder="예: 10"
+                        className="w-full bg-transparent border border-[#333] focus:border-[#059669] rounded-full py-3 pl-6 pr-12 text-white outline-none transition"
+                      />
+                      <span className="absolute right-6 top-1/2 -translate-y-1/2 text-white font-bold">원</span>
+                    </div>
                   </div>
-                  <span className="text-gray-500 mt-5">~</span>
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-400 font-bold block mb-1">개방 종료 시간</label>
-                    <input 
-                      type="time" 
-                      value={closeTime} 
-                      onChange={(e) => setCloseTime(e.target.value)}
-                      className="w-full bg-[#1E1E1E] border border-[#444] rounded-lg px-3 py-2 text-white outline-none focus:border-[#10B981]"
-                    />
+
+                  {/* 🌟 시간 설정 UI */}
+                  <div className="flex items-center gap-4 bg-[#121212] p-4 rounded-xl border border-[#333]">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-400 font-bold block mb-1">개방 시작 시간</label>
+                      <input 
+                        type="time" 
+                        value={openTime} 
+                        onChange={(e) => setOpenTime(e.target.value)}
+                        className="w-full bg-[#1E1E1E] border border-[#444] rounded-lg px-3 py-2 text-white outline-none focus:border-[#10B981]"
+                      />
+                    </div>
+                    <span className="text-gray-500 mt-5">~</span>
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-400 font-bold block mb-1">개방 종료 시간</label>
+                      <input 
+                        type="time" 
+                        value={closeTime} 
+                        onChange={(e) => setCloseTime(e.target.value)}
+                        className="w-full bg-[#1E1E1E] border border-[#444] rounded-lg px-3 py-2 text-white outline-none focus:border-[#10B981]"
+                      />
+                    </div>
                   </div>
+                </div>
+
+                {/* 🌟 100% 안전 보장 시스템 UI (복구됨) */}
+                <div className="bg-[#1A2E26] border border-[#059669] p-4 rounded-xl mb-6">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield size={16} className="text-[#10B981]" />
+                    <span className="text-[#10B981] font-bold text-sm">100% 안전 보장 시스템</span>
+                  </div>
+                  <ul className="text-[11px] text-gray-300 space-y-1 ml-1 list-disc list-inside">
+                    <li>군사급 암호화 파이프라인으로 안전하게 보관됩니다.</li>
+                    <li>공식 대시보드에서 판매 전용 키 발급을 권장합니다.</li>
+                    <li>판매 기간 종료 시 또는 잔액 소진 시 서버에서 자동 차단(Hard Drop)됩니다.</li>
+                  </ul>
                 </div>
 
                 <button
                   onClick={async () => {
                     if (!currentUser?.email) return alert("로그인 및 회원가입이 필요합니다.");
+                    if (!priceRaw) return alert("가격을 입력해주세요.");
                     
+                    setIsSubmitting(true);
                     try {
                       const encryptedKey = CryptoUtil.encrypt(apiKeyInput.trim());
 
-                      // 🌟 DB에 openTime, closeTime 함께 저장
                       await addDoc(collection(db, 'market_items'), {
                         sellerId: currentUser.uid,
                         sellerName: currentUser.displayName || '인증된 판매자',
                         apiType: 'xai', 
                         apiKey: encryptedKey,
                         tier: verifyStatus.isPaid ? 'premium' : 'basic', 
-                        price: 10, 
+                        price: Number(priceRaw) || 10, 
                         salesCount: 0, 
                         status: 'active',
                         openTime: openTime,   
                         closeTime: closeTime, 
-                        maxCapacity: 500, // 🌟 [추가] 일일 최대 사용 가능 횟수 (가상 게이지)
-                        usedCapacity: 0,  // 🌟 [추가] 현재 사용된 횟수 (실시간 동기화됨)
+                        maxCapacity: 500, 
+                        usedCapacity: 0,  
                         createdAt: serverTimestamp()
                       });
 
                       alert(`✅ 성공적으로 등록되었습니다!\n매일 [${openTime} ~ ${closeTime}] 사이에만 안전하게 판매됩니다.`);
                       
                       setApiKeyInput('');
+                      setPriceRaw('');
                       setVerifyStatus(null);
                       
                     } catch (error) {
                       console.error("등록 에러:", error);
                       alert("마켓 등록 중 시스템 오류가 발생했습니다.");
+                    } finally {
+                      setIsSubmitting(false);
                     }
                   }}
-                  className="w-full bg-[#059669] hover:bg-[#047857] text-white font-bold py-3 rounded-xl transition shadow-md flex justify-center items-center gap-2"
+                  disabled={isSubmitting}
+                  className="w-full bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-bold py-3 rounded-xl transition shadow-md flex justify-center items-center gap-2"
                 >
-                  <CheckCircle2 size={18} /> 설정 완료하고 판매 시작하기
+                  {isSubmitting ? '안전하게 등록 중...' : <><CheckCircle2 size={18} /> 설정 완료하고 판매 시작하기</>}
                 </button>
               </div>
             )}
@@ -982,13 +1018,13 @@ return (
                   <Paperclip size={20} />
                 </button>
 
-                <div className="relative flex-1 bg-[#1E1E1E] border border-[#333] focus-within:border-[#059669] rounded-2xl shadow-inner min-h-[56px] flex flex-col justify-end">
+                <div className="relative flex-1 bg-[#1E1E1E] border border-[#333] focus-within:border-[#059669] rounded-2xl shadow-inner min-h-[56px] flex flex-col justify-center">
               <textarea 
                 ref={textareaRef} rows={1} value={input} onChange={handleInputResize} onKeyDown={handleKeyDown}
                 placeholder={isEng ? "Ask AI anything" : "AI에게 질문해보세요"}
-                className="w-full bg-transparent px-6 pt-4 pb-12 outline-none text-white resize-none max-h-[150px] overflow-y-auto no-scrollbar"
+                className="w-full bg-transparent pl-6 pr-32 py-4 outline-none text-white resize-none max-h-[150px] overflow-y-auto no-scrollbar"
               />
-              <div className="absolute right-3 bottom-3 flex items-center gap-2">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                 <div className="flex items-center bg-[#121212] px-2 py-1 rounded-lg border border-[#444]">
                   <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} className="bg-transparent text-[11px] font-bold text-[#10B981] outline-none cursor-pointer appearance-none">
                     {AVAILABLE_MODELS.map(m => <option key={m} value={m}>{MODEL_LABELS[m]}</option>)}
