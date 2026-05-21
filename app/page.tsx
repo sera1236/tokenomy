@@ -718,10 +718,8 @@ export default function ChatScreen() {
       }
 
       // 화면에 빈 말풍선을 먼저 띄웁니다.
-
-      // 화면에 빈 말풍선을 먼저 띄웁니다.
-      setMessages(prev => [...prev, { role: 'assistant', content: '', apiType: currentApiType }]);
-
+      // 🌟 [수정] 스토어의 낡은 값이 아니라, 현재 사용자가 콤보박스에서 고른 'selectedModel'을 명확히 박아줍니다.
+      setMessages(prev => [...prev, { role: 'assistant', content: '', apiType: selectedModel }]);
       // 🌟 프론트엔드에서 타이핑 효과 연출 (속도 대폭 개선)
       let currentText = "";
       const isCode = rawResponse.includes('```') || rawResponse.includes('<html');
