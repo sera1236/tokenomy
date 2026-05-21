@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/useStore';
-import { Send, Bot, Paperclip, X, Image as ImageIcon, Menu, Plus, MessageSquare, User, Edit2, Trash2, Key, ShieldCheck, CheckCircle2, MoreVertical, Pin } from 'lucide-react';
+import { Send, Bot, Paperclip, X, Image as ImageIcon, Menu, Plus, MessageSquare, User, Edit2, Trash2, Key, Shield, ShieldCheck, CheckCircle2, MoreVertical, Pin } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { CryptoUtil } from '@/lib/crypto';
 import remarkGfm from 'remark-gfm';
