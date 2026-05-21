@@ -3,27 +3,18 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
-import { getAnalytics, isSupported } from "firebase/analytics";
 
+// 🌟 Analytics 관련 코드는 싹 날리고 순수 DB/인증 기능만 남겼습니다.
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID // 🌟 추가됨
+apiKey: "AIzaSyC_WqM5hZB4aT-F_0K0vQMcR9zSdlUnvjs",
+  authDomain: "tokenomy-f719b.firebaseapp.com",
+  projectId: "tokenomy-f719b",
+  storageBucket: "tokenomy-f719b.firebasestorage.app",
+  messagingSenderId: "137939714156",
+  appId: "1:137939714156:web:42f75e4be8d25cea1cd849"
 };
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-
-// 🌟 애널리틱스는 브라우저 환경에서만 초기화되도록 방어막을 칩니다.
-let analytics = null;
-if (typeof window !== 'undefined') {
-  isSupported().then(supported => {
-    if (supported) analytics = getAnalytics(app);
-  });
-}
