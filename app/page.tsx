@@ -332,6 +332,9 @@ export default function ChatScreen() {
     const user = auth.currentUser;
     if (!user) { alert('로그인이 필요합니다.'); return; }
     
+    // 🌟 [추가] 이미 빈 '새로운 대화' 방에 있다면 중복 생성 금지
+    if (messages.length === 0) return;
+
     const newRoomId = `room_${Date.now()}`;
     await setDoc(doc(db, 'chat_rooms', newRoomId), {
       roomId: newRoomId,
@@ -658,38 +661,41 @@ export default function ChatScreen() {
     setMessages(prev => [...prev, { role: 'user', content: displayMsg, attachedImages: imageFiles }]);
     
     // 🌟 전송 즉시 Firestore 'chats' 컬렉션에 유저의 메시지와 첨부 이미지 배열을 영구 누적합니다.
-    // 방이 없으면 하나 만들기 보장
     let targetRoomId = currentRoomId;
+    let roomTitle = displayMsg.slice(0, 20) + (displayMsg.length > 20 ? '...' : '');
+
+    // 방이 아예 없거나, 빈 깡통 방('새로운 대화')인 상태에서 첫 마디를 쳤을 때
+    const existingRoom = chatRooms.find(r => r.roomId === targetRoomId);
+    
     if (!targetRoomId) {
+      // 아예 방이 없는 경우 새로 생성하고 제목 지정
       targetRoomId = `room_${Date.now()}`;
       await setDoc(doc(db, 'chat_rooms', targetRoomId), {
         roomId: targetRoomId,
         userId: user?.uid,
-        title: displayMsg.slice(0, 20) + (displayMsg.length > 20 ? '...' : ''),
+        title: roomTitle,
         updatedAt: serverTimestamp()
       });
       setCurrentRoomId(targetRoomId);
+    } else if (existingRoom && existingRoom.title === '새로운 대화') {
+      // 빈 깡통 방에서 첫 대화를 쳤을 때 첫 프롬프트로 제목 덮어쓰기
+      await updateDoc(doc(db, 'chat_rooms', targetRoomId), { 
+        title: roomTitle,
+        updatedAt: serverTimestamp()
+      });
+    } else if (existingRoom) {
+      // 기존 방에서 대화 중일 땐 시간만 업데이트해서 맨 위로 끌어올리기
+      await updateDoc(doc(db, 'chat_rooms', targetRoomId), { updatedAt: serverTimestamp() });
     }
 
     await addDoc(collection(db, 'chats'), {
-      roomId: targetRoomId, // 🌟 방 ID 기준 저장
+      roomId: targetRoomId, 
       userId: user?.uid,
       role: 'user',
       content: displayMsg,
       attachedImages: imageFiles.length > 0 ? imageFiles : null,
       createdAt: serverTimestamp()
     });
-
-    // 🌟 방 제목이 '새로운 대화'면 유저의 첫 질문 내용으로 제목 자동 업데이트
-    const currentRoom = chatRooms.find(r => r.roomId === targetRoomId);
-    if (currentRoom && currentRoom.title === '새로운 대화') {
-      await updateDoc(doc(db, 'chat_rooms', targetRoomId), { 
-        title: displayMsg.slice(0, 20) + (displayMsg.length > 20 ? '...' : ''),
-        updatedAt: serverTimestamp()
-      });
-    } else if (currentRoom) {
-      await updateDoc(doc(db, 'chat_rooms', targetRoomId), { updatedAt: serverTimestamp() }); // 끌어올리기
-    }
 
     setIsLoading(true);
 
@@ -705,10 +711,12 @@ export default function ChatScreen() {
         signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           prompt: finalPrompt, 
-          encryptedApiKey: currentApiKey || lowestPriceKey, // 🌟 백엔드가 못 찾으므로 프론트에서 탐색한 최저가 키를 직접 전송
+          encryptedApiKey: currentApiKey || lowestPriceKey, 
           history: contextHistory,
           images: imageFiles,
-          requestedModel: selectedModel // 🌟 [대공사 3단계] 방금 드롭다운에서 고른 모델명 하청!
+          requestedModel: selectedModel,
+          roomId: targetRoomId, // 🌟 [RAG 시스템] Pinecone 검색용 현재 방 ID 전달
+          userId: user?.uid     // 🌟 [RAG 시스템] Pinecone 메타데이터 저장용 유저 ID 전달
         })
       });
 
@@ -864,11 +872,10 @@ return (
       <div className={`flex flex-col w-full ${showPreview && currentView === 'chat' ? 'md:w-1/2' : ''} border-r border-[#2C2C2C] transition-all duration-500 h-full`}>
         <header className="flex items-center justify-between p-4 bg-[#1E1E1E] border-b border-[#2C2C2C] shrink-0">
           <div className="flex items-center">
-            {/* 🌟 모바일 햄버거 메뉴 버튼 */}
-            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 mr-3 text-gray-400 hover:text-[#10B981] transition">
+            {/* 🌟 [수정] 모바일뿐만 아니라 데스크탑에서도 사이드바를 열고 닫을 수 있게 md:hidden 삭제 */}
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 mr-3 text-gray-400 hover:text-[#10B981] transition">
               <Menu size={24} />
             </button>
-            {/* 🌟 (폭파 완료) 메인 대문이므로 불필요해진 뒤로가기 버튼은 완전히 삭제되었습니다. */}
             <div>
               <div className="flex items-center gap-2">
                 {/* 콤보박스는 아래 텍스트박스 위로 이동됨 */}
