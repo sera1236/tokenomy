@@ -19,8 +19,7 @@ interface Message {
   apiType?: string; // 🌟 5번 요청: 모델별 색상을 구분하기 위해 누가 대답했는지 저장
   attachedImages?: string[]; // 🌟 1번 요청: 이미지 파일 미리보기 저장용
 }
-
-// 🌟 코드블록 개편: 카피 버튼 복구 및 개별 UI 프리뷰 렌더링 지원
+// 🌟 코드블록 개편: 스크롤해도 따라오는 상단 바(Sticky) 및 명확한 프리뷰 버튼 구성
 const CodeBlock = ({ language, value, showPreview, onOpenPreview }: { language: string, value: string, showPreview: boolean, onOpenPreview: (html: string) => void }) => {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
@@ -29,51 +28,34 @@ const CodeBlock = ({ language, value, showPreview, onOpenPreview }: { language: 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  
-  
   return (
-    <div className="relative group my-4 rounded-xl shadow-lg border border-[#333] bg-[#121212] w-full max-w-full" onDoubleClick={() => { if (language === 'html') onOpenPreview(value); }}>
+    <div className="relative group my-4 rounded-xl shadow-lg border border-[#333] bg-[#121212] w-full max-w-full overflow-hidden" onDoubleClick={() => { if (language === 'html') onOpenPreview(value); }}>
       
-      {/* 🌟 우상단 COPY 버튼 (항상 노출) */}
-      <div className="absolute top-2 right-2 z-20 flex gap-2">
-        <div className="flex items-center gap-1.5 bg-[#1E1E1E] border border-[#333] px-3 py-1.5 rounded-lg shadow-md">
-          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{language}</span>
-          <div className="w-[1px] h-3 bg-[#333] mx-1"></div>
-          <button onClick={handleCopy} className="text-[#059669] hover:text-[#10B981] text-[10px] font-black transition-colors">
-            {copied ? 'DONE!' : 'COPY'}
+      {/* 🌟 스크롤 시 상단에 고정되는 헤더 바 (UI 버튼과 Copy 버튼 통합) */}
+      <div className="sticky top-0 z-20 flex justify-between items-center bg-[#1E1E1E] px-4 py-2 border-b border-[#333] backdrop-blur-md bg-opacity-90">
+        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{language}</span>
+        <div className="flex items-center gap-2">
+          {language === 'html' && (
+            <button 
+              onClick={() => onOpenPreview(value)} 
+              className="bg-[#059669] hover:bg-[#10B981] text-white text-[10px] font-black px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1 animate-pulse"
+            >
+              ✨ UI 프리뷰 열기
+            </button>
+          )}
+          <button onClick={handleCopy} className="bg-[#2C2C2C] hover:bg-[#333] border border-[#444] text-[#10B981] hover:text-white text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors">
+            {copied ? 'COPIED!' : 'COPY'}
           </button>
         </div>
       </div>
 
-      {/* 🌟 우하단 COPY CODE 버튼 (호버링 시 노출) */}
-      <div className="absolute right-2 bottom-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-        <button onClick={handleCopy} className="bg-[#1E1E1E] border border-[#333] text-[#059669] hover:text-[#10B981] text-[10px] font-black px-3 py-1.5 rounded-lg shadow-md transition-colors">
-          {copied ? 'COPIED!' : 'COPY CODE'}
-        </button>
-      </div>
-
-      {/* 🌟 4번 요청: 개별 UI 프리뷰 스티키 버튼 */}
-      {language === 'html' && !showPreview && (
-        <div className="absolute top-0 right-0 bottom-0 translate-x-[calc(100%+0.5rem)] pointer-events-none z-10 hidden md:block">
-          <div className="sticky top-4 pointer-events-auto" style={{ transform: 'scale(0.6)', transformOrigin: 'top left' }}>
-            <button 
-              onClick={() => onOpenPreview(value)} 
-              className="px-6 py-3 bg-gradient-to-r from-[#059669] to-[#10B981] text-white rounded-full font-black shadow-[0_0_20px_rgba(5,150,105,0.6)] border border-[#34D399] flex items-center gap-2 whitespace-nowrap hover:scale-105 transition-transform animate-bounce"
-            >
-              <span className="text-xl">✨</span> <span className="text-lg">이 UI 보기</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 코드 출력부 (상하단 패딩을 주어 버튼과 코드가 겹치지 않게 함) */}
-      <div className="overflow-x-auto w-full pt-12 pb-12">
+      <div className="overflow-x-auto w-full p-4 max-h-[600px]">
         <SyntaxHighlighter
           style={oneDark}
           language={language}
           PreTag="div"
           wrapLongLines={true}
-          customStyle={{ margin: 0, padding: '0 1rem', background: 'transparent' }}
+          customStyle={{ margin: 0, padding: 0, background: 'transparent' }}
         >
           {value}
         </SyntaxHighlighter>
@@ -81,6 +63,7 @@ const CodeBlock = ({ language, value, showPreview, onOpenPreview }: { language: 
     </div>
   );
 };
+
 const IntegratedMyPage = ({ currentUser }: { currentUser: any }) => {
   const [tab, setTab] = useState<'buyer' | 'seller'>('buyer');
   const { userPoints } = useStore();
@@ -713,7 +696,8 @@ export default function ChatScreen() {
     try {
       abortControllerRef.current = new AbortController(); // 🌟 중단 컨트롤러 초기화
 
-      const contextHistory = messages.slice(-5).map(m => ({ role: m.role, content: m.content }));
+      // 🌟 [수정] 문맥 대화 기억 개수를 최근 20개로 넉넉하게 상향 (과도한 무한 증식 방어)
+      const contextHistory = messages.slice(-20).map(m => ({ role: m.role, content: m.content }));
 
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -816,7 +800,7 @@ return (
       <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#1A1A1A] border-r border-[#2C2C2C] transform transition-all duration-300 md:relative md:translate-x-0 flex flex-col ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'} ${currentView === 'mypage' ? 'brightness-50 pointer-events-none' : ''}`}>
         
         {/* 사이드바 헤더 및 새 대화 버튼 복구 */}
-        <div className="p-4 border-b border-[#2C2C2C] flex justify-between items-center h-[73px] shrink-0 relative z-20">
+        <div className="p-4 flex justify-between items-center h-[73px] shrink-0 relative z-20">
           <h2 className="text-[#10B981] font-black text-xl ml-2 tracking-tight">토크노미</h2>
           <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-gray-400 hover:text-white p-2">
             <X size={20} />
@@ -849,7 +833,7 @@ return (
           ))}
         </div>
         {/* 🌟 사이드바 맨 하단: 로그인 상태에 따라 바뀌는 스마트 버튼 */}
-        <div className="p-4 border-t border-[#2C2C2C] mt-auto shrink-0">
+        <div className="p-4 mt-auto shrink-0">
           {currentUser ? (
             <button onClick={() => setCurrentView('mypage')} className={`w-full flex items-center justify-center gap-3 p-3 rounded-xl transition font-bold shadow-md ${currentView === 'mypage' ? 'bg-[#059669] text-white' : 'bg-[#2C2C2C] hover:bg-[#333] text-white'}`}>
               <User size={18} className={currentView === 'mypage' ? 'text-white' : 'text-[#10B981]'} /> 마이페이지 가기
@@ -876,8 +860,8 @@ return (
         </div>
       )}
 
-      {/* 좌측: 채팅창 영역 */}
-      <div className={`flex flex-col ${showPreview ? 'hidden md:flex md:w-1/2' : 'w-full'} border-r border-[#2C2C2C] transition-all duration-500 h-full`}>
+      {/* 좌측: 채팅창 영역 (화면이 좁아져도 절대 사라지지 않음) */}
+      <div className={`flex flex-col w-full ${showPreview && currentView === 'chat' ? 'md:w-1/2' : ''} border-r border-[#2C2C2C] transition-all duration-500 h-full`}>
         <header className="flex items-center justify-between p-4 bg-[#1E1E1E] border-b border-[#2C2C2C] shrink-0">
           <div className="flex items-center">
             {/* 🌟 모바일 햄버거 메뉴 버튼 */}
@@ -898,38 +882,26 @@ return (
                   100% Official API 직결
                 </span>
               </div>
-              <p className="text-[11px] text-[#10B981] font-bold mt-1.5 flex items-center gap-1">
-                🔒 {isEng ? 'Encrypted & Pay-per-prompt (10 KRW)' : '군사급 암호화 & 건당 10원 종량제 적용 중'}
-              </p>
-              
-              {/* 🌟 [핵심] 전 세계 동시 접속자 화면에 실시간 연동되는 잔여량 게이지 UI */}
-              {activeMarketItem && activeMarketItem.maxCapacity && (
-                <div className="mt-2.5 w-full max-w-[200px]">
-                  <div className="flex justify-between text-[9px] text-gray-400 mb-1 font-mono">
-                    <span>API 매물 잔여량</span>
-                    <span className={activeMarketItem.maxCapacity - activeMarketItem.usedCapacity < 50 ? 'text-red-400 font-bold' : 'text-[#10B981]'}>
-                      {Math.max(0, activeMarketItem.maxCapacity - (activeMarketItem.usedCapacity || 0))} / {activeMarketItem.maxCapacity}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden border border-[#333]">
-                    <div 
-                      className={`h-1.5 rounded-full transition-all duration-500 ${activeMarketItem.maxCapacity - activeMarketItem.usedCapacity < 50 ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-[#10B981] shadow-[0_0_8px_rgba(16,185,129,0.8)]'}`} 
-                      style={{ width: `${Math.max(0, 100 - ((activeMarketItem.usedCapacity || 0) / activeMarketItem.maxCapacity * 100))}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
-
-            </div>
+              </div>
           </div>
           
-          {/* 🌟 1번 요청: EN / KO 언어 변환 버튼 */}
-          <button 
-            onClick={() => setIsEng(!isEng)}
-            className="px-3 py-1.5 bg-[#2C2C2C] hover:bg-[#333] rounded-lg text-xs font-bold text-gray-300 transition"
-          >
-            {isEng ? '🇰🇷 KO' : '🇺🇸 EN'}
-          </button>
+          {/* 🌟 잔여량 게이지 UI를 우측(언어 버튼 자리)으로 이동 */}
+          {activeMarketItem && activeMarketItem.maxCapacity && (
+            <div className="w-[150px] md:w-[200px] shrink-0">
+              <div className="flex justify-between text-[9px] text-gray-400 mb-1 font-mono">
+                <span>API 매물 잔여량</span>
+                <span className={activeMarketItem.maxCapacity - activeMarketItem.usedCapacity < 50 ? 'text-red-400 font-bold' : 'text-[#10B981]'}>
+                  {Math.max(0, activeMarketItem.maxCapacity - (activeMarketItem.usedCapacity || 0))} / {activeMarketItem.maxCapacity}
+                </span>
+              </div>
+              <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden border border-[#333]">
+                <div 
+                  className={`h-1.5 rounded-full transition-all duration-500 ${activeMarketItem.maxCapacity - activeMarketItem.usedCapacity < 50 ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-[#10B981] shadow-[0_0_8px_rgba(16,185,129,0.8)]'}`} 
+                  style={{ width: `${Math.max(0, 100 - ((activeMarketItem.usedCapacity || 0) / activeMarketItem.maxCapacity * 100))}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
         </header>
 {/* 🌟 대장님 여기에 꼼꼼히 분기를 쳐서 대화기록과 하단 입력창을 온전히 감쌌습니다. */}
         {currentView === 'mypage' ? (
@@ -941,8 +913,8 @@ return (
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-gray-500 opacity-50">
                   <Bot size={56} className="mb-4 text-[#059669]" />
-                  <p className="font-bold">{isEng ? 'Secure channel ready.' : '보안 통신이 준비되었습니다.'}</p>
-                  <p className="text-sm">{isEng ? 'Keys are never exposed.' : '클라이언트 측 메모리에 API 키가 노출되지 않습니다.'}</p>
+                  <p className="font-bold">{isEng ? 'End-to-End Encryption applied.' : '강력한 보안 채널이 준비되었습니다.'}</p>
+                  <p className="text-sm text-center max-w-xs mt-2">{isEng ? 'Your data is not exposed to the seller.' : '매수자님의 프롬프트와 대화 내용은 판매자 및 플랫폼에 일절 노출되거나 보관되지 않습니다.'}</p>
                 </div>
               )}
               {renderedMessages}
@@ -975,15 +947,6 @@ return (
                     </button>
                   ))}
                 </div>
-                
-                {messages.length > 0 && !isLoading && (
-                  <button 
-                    onClick={handleRegenerate}
-                    className="whitespace-nowrap px-3 py-1 rounded-full bg-[#2C2C2C] text-[11px] text-[#10B981] font-bold hover:bg-[#333] transition ml-2"
-                  >
-                    🔄 {isEng ? 'Regenerate' : '재생성'}
-                  </button>
-                )}
               </div>
 
               {attachedFiles.length > 0 && (
@@ -1056,9 +1019,9 @@ return (
         )}
       </div>
 
-      {/* 우측: 실시간 HTML 프리뷰 */}
-      {showPreview && previewHtml && (
-        <div className="w-full md:w-1/2 bg-white h-full relative border-l border-[#2C2C2C] flex flex-col">
+      {/* 우측: 실시간 HTML 프리뷰 (마이페이지일 땐 숨김, 화면이 좁아지면 프리뷰가 숨겨짐) */}
+      {showPreview && previewHtml && currentView === 'chat' && (
+        <div className="hidden md:flex flex-col md:w-1/2 bg-white h-full relative border-l border-[#2C2C2C]">
           <div className="absolute top-4 right-4 z-10">
             <button 
               onClick={() => setShowPreview(false)} 
