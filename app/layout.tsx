@@ -4,11 +4,6 @@ import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
-export const metadata: Metadata = {
-  title: "토크노미 (Tokenomy)",
-  description: "세계 최초 실시간 AI 토큰 거래소 및 릴레이 챗",
-};
-
 export default function RootLayout({
   children,
 }: {
@@ -16,9 +11,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
+      {/* 🌟 이제 모든 페이지에서 sig-gradient와 sig-solid 변수를 쓸 수 있습니다. */}
       <body className={`${inter.className} bg-[#121212] text-white min-h-screen relative`}>
-        {/* 🌟 탭바를 철거하고 불필요한 하단 여백(pb-24)도 완전히 날렸습니다. */}
-        <div>
+        <div className="layout-root">
           {children}
         </div>
       </body>

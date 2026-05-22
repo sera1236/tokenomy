@@ -1,7 +1,22 @@
 @import "tailwindcss";
 
-/* 🌟 배경을 칠흑 같은 다크 모드로 고정합니다 */
+:root {
+  /* 🌟 토크노미의 새로운 시그니처 프리미엄 딥 포레스트 그린 그라데이션 */
+  --sig-gradient: linear-gradient(135deg, #011C15 0%, #022C22 50%, #121212 100%);
+  --sig-solid: #059669; 
+  --sig-hover: #047857;
+}
+
+/* 🌟 배경 및 기본 텍스트 설정 */
 body {
   background-color: #121212;
   color: white;
+}
+
+@layer utilities {
+  /* 🌟 전체 프로젝트 어디서든 쓸 수 있는 공용 클래스 */
+  .bg-sig-gradient { background: var(--sig-gradient); }
+  .bg-sig-solid { background-color: var(--sig-solid); }
+  .hover-sig-solid:hover { background-color: var(--sig-hover); }
+  .text-sig-solid { color: var(--sig-solid); }
 }

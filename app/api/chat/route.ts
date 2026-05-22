@@ -66,9 +66,12 @@ export async function POST(req: Request) {
     const isUIRequest = rawPrompt.startsWith('/화면') || rawPrompt.startsWith('/ui') || 
                         (/(만들어|짜줘|웹사이트|페이지|화면|컴포넌트|코드|코딩|앱|html|css)/i.test(rawPrompt));
     
+    // 🌟 [수정] 과거 이미지 존재 여부와 무관하게, 유저의 현재 요청에 그림 관련 키워드(변경, 바꿔, 색, 해줘 등)가 반드시 포함되어야만 그림 요청으로 인식합니다. (번역/역사 질문 오작동 차단)
     const hasRecentImage = history.slice(-3).some((m: any) => m.role === 'assistant' && m.content.includes('!['));
-    const isImageRequest = rawPrompt.startsWith('/그림 ') || (!isUIRequest && (/(그려|이미지|사진|배경화면)/i.test(rawPrompt) || (hasRecentImage && /(변경|바꿔|해줘|색으로)/i.test(rawPrompt))));
-
+    const isImageRequest = rawPrompt.startsWith('/그림 ') || (!isUIRequest && (
+      /(그려|이미지|사진|배경화면)/i.test(rawPrompt) || 
+      (hasRecentImage && /(변경|바꿔|색으로)/i.test(rawPrompt) && !/(번역|역사|뜻)/i.test(rawPrompt)) // 🌟 RAG의 부작용 차단: 번역/역사 질문에는 낚이지 않음
+    ));
     // 🌟 [RAG 시스템 가동] 코딩/UI 요청일 경우에만 Pinecone 벡터 DB를 검색하여 과거 문맥을 소환합니다.
     let ragContext = "";
     if (isUIRequest) {
@@ -223,11 +226,14 @@ ${cleanPrompt}
         });
         const translateData = await translateRes.json();
         let contentStr = translateData.choices?.[0]?.message?.content || '{}';
-        contentStr = contentStr.replace(/```json/g, '').replace(/```/g, '').trim(); // 마크다운 찌꺼기 제거
+        
+        // 🌟 [수정] Grok이 JSON 앞뒤로 ```json ... ``` 같은 마크다운 찌꺼기를 붙여도 완벽하게 추출해내는 정규식 파서 가동
+        const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
+        const cleanContentStr = jsonMatch ? jsonMatch[0] : '{}';
         
         let englishPrompt = 'a beautiful scenery';
         try {
-          const parsed = JSON.parse(contentStr);
+          const parsed = JSON.parse(cleanContentStr);
           customImageMessage = parsed.message || '이미지를 생성해볼게!';
           englishPrompt = parsed.prompt || englishPrompt;
         } catch(e) {

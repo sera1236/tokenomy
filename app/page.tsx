@@ -546,16 +546,33 @@ export default function ChatScreen() {
               ? 'bg-[#059669] border-[#059669] text-white rounded-br-sm shadow-lg' 
               : `${aiGlassmorphism} rounded-bl-sm`
           }`}>
-            {/* 🌟 이미지 렌더링 영역 */}
+            {/* 🌟 이미지 렌더링 영역 및 [저장하기] 버튼 추가 로직 */}
             {msg.attachedImages && msg.attachedImages.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
+              <div className="flex flex-wrap gap-3 mb-3">
                 {msg.attachedImages.map((img, i) => (
-                  <img key={i} src={img} alt="attached" className="max-w-[200px] rounded-lg border border-[#ffffff30]" />
+                  <div key={i} className="relative group/image">
+                    <img src={img} alt="attached" className="max-w-[200px] rounded-lg border border-[#ffffff30]" />
+                    
+                    {/* 🌟 [추가] 이미지에 마우스를 올리면 다운로드 폴더로 저장하는 고급스러운 버튼 등장 */}
+                    <button 
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = img;
+                        link.download = `tokenomy_image_${Date.now()}.png`; // 🌟 다운로드 파일명 지정
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                      className="absolute bottom-2 right-2 p-1.5 bg-[#121212]/80 rounded-lg text-xs font-black text-white backdrop-blur-sm opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center gap-1.5"
+                    >
+                      💾 다운로드
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
             {/* 🌟 [수정] 대독성을 높이기 위해 본문 텍스트 크기를 text-sm에서 text-[15px]로 살짝 키웠습니다. */}
-            <div className="prose prose-invert max-w-none text-[15px] leading-relaxed [&>pre]:!bg-transparent [&>pre]:!p-0 [&>pre]:!m-0">
+            <div className="prose prose-invert max-w-none text-[15px] leading-relaxed [&>pre]:!bg-transparent [&>pre]:!p-0 [&>pre]:!m-0 overflow-visible relative group/assistant_msg">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
