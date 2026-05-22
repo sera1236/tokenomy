@@ -332,9 +332,17 @@ export default function ChatScreen() {
     const user = auth.currentUser;
     if (!user) { alert('로그인이 필요합니다.'); return; }
     
-    // 🌟 [추가] 이미 빈 '새로운 대화' 방에 있다면 중복 생성 금지
-    if (messages.length === 0) return;
+    // 🌟 [수정] 기존의 먹통을 만들던 중복 방지 로직을 사이드바 목록 검사 방식으로 개편합니다.
+    // 목록에 이미 대화가 시작되지 않은 '새로운 대화' 방이 있다면 새로 만들지 않고 그 방으로 이동시킵니다.
+    const hasEmptyRoom = chatRooms.find(r => r.title === '새로운 대화');
+    if (hasEmptyRoom) {
+      setCurrentRoomId(hasEmptyRoom.roomId);
+      setMessages([]);
+      if (window.innerWidth < 768) setIsSidebarOpen(false);
+      return;
+    }
 
+    // 완전히 새로운 빈 방 개설 및 실시간 사이드바 렌더링 보장
     const newRoomId = `room_${Date.now()}`;
     await setDoc(doc(db, 'chat_rooms', newRoomId), {
       roomId: newRoomId,
@@ -546,7 +554,8 @@ export default function ChatScreen() {
                 ))}
               </div>
             )}
-            <div className="prose prose-invert max-w-none text-sm leading-relaxed [&>pre]:!bg-transparent [&>pre]:!p-0 [&>pre]:!m-0">
+            {/* 🌟 [수정] 대독성을 높이기 위해 본문 텍스트 크기를 text-sm에서 text-[15px]로 살짝 키웠습니다. */}
+            <div className="prose prose-invert max-w-none text-[15px] leading-relaxed [&>pre]:!bg-transparent [&>pre]:!p-0 [&>pre]:!m-0">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -705,6 +714,19 @@ export default function ChatScreen() {
       // 🌟 [수정] 문맥 대화 기억 개수를 최근 20개로 넉넉하게 상향 (과도한 무한 증식 방어)
       const contextHistory = messages.slice(-20).map(m => ({ role: m.role, content: m.content }));
 
+      // 🌟 [핵심] 현재 채팅방 기록을 역순으로 뒤져서, AI가 가장 최근에 그려준 그림 URL을 찾아냅니다!
+      let lastGeneratedImageUrl = null;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'assistant') {
+          // 마크다운 형식 ![설명](URL) 에서 URL만 정규식으로 쏙 빼옵니다.
+          const match = messages[i].content.match(/!\[.*?\]\((https:\/\/.*?)\)/);
+          if (match) {
+            lastGeneratedImageUrl = match[1];
+            break;
+          }
+        }
+      }
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -715,8 +737,9 @@ export default function ChatScreen() {
           history: contextHistory,
           images: imageFiles,
           requestedModel: selectedModel,
-          roomId: targetRoomId, // 🌟 [RAG 시스템] Pinecone 검색용 현재 방 ID 전달
-          userId: user?.uid     // 🌟 [RAG 시스템] Pinecone 메타데이터 저장용 유저 ID 전달
+          roomId: targetRoomId, 
+          userId: user?.uid,
+          referenceImageUrl: lastGeneratedImageUrl // 🌟 방금 찾은 이전 그림 URL을 백엔드로 쏴줍니다!
         })
       });
 

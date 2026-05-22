@@ -6,7 +6,8 @@ export async function POST(req: Request) {
   try {
     // 🌟 [RAG 통합 보정] req.json()을 bodyData 객체로 안전하게 한 번만 받아서 하단 저장 로직까지 에러 없이 공유합니다.
     const bodyData = await req.json();
-    const { prompt: rawPrompt, encryptedApiKey, history = [], images = [], requestedModel, roomId, userId } = bodyData;
+    // 🌟 [추가] 프론트에서 넘겨줄 이전 그림 URL(referenceImageUrl)을 추가로 받습니다.
+    const { prompt: rawPrompt, encryptedApiKey, history = [], images = [], requestedModel, roomId, userId, referenceImageUrl } = bodyData;
     const apiKey = CryptoUtil.decrypt(encryptedApiKey).trim();
 
     let prompt = rawPrompt;
@@ -236,12 +237,25 @@ ${cleanPrompt}
 
         console.log("🎨 [Grok 번역 프롬프트]:", englishPrompt);
 
-        apiUrl = 'https://fal.run/fal-ai/flux/schnell'; 
         headers = { 
           'Authorization': `Key d8cc860f-af9d-4cfb-b1ef-baa4cdc106a5:c219d12ea454478092123931288bdfa6`, 
           'Content-Type': 'application/json' 
         };
-        body = { prompt: englishPrompt, image_size: "landscape_4_3", num_inference_steps: 4 };
+
+        // 🌟 [핵심] 이전 그림 URL이 넘어왔다면 '수정(Image-to-Image)' 엔진으로, 아니면 '새로 그리기(Text-to-Image)' 엔진으로 자동 분기!
+        if (referenceImageUrl) {
+          apiUrl = 'https://fal.run/fal-ai/flux/dev/image-to-image'; 
+          body = { 
+            prompt: englishPrompt, 
+            image_url: referenceImageUrl, // 🌟 밑그림으로 깔아줄 원본 이미지
+            strength: 0.85, // 🌟 (0.0 ~ 1.0) 낮을수록 원본 형태(Shape)를 강하게 유지합니다. 0.85가 형태 유지+색상 변경의 황금비율!
+            image_size: "landscape_4_3" 
+          };
+          console.log("🔄 [수정 모드 가동] 원본 이미지 유지(Inpainting) 엔진 사용");
+        } else {
+          apiUrl = 'https://fal.run/fal-ai/flux/schnell'; 
+          body = { prompt: englishPrompt, image_size: "landscape_4_3", num_inference_steps: 4 };
+        }
       } else {
         // 💬 평범한 대화는 원래대로 xAI(Grok)로 전송 (🌟 수정: openAiMessages로 변경하여 대화 기록 유지)
         apiUrl = 'https://api.x.ai/v1/chat/completions';
